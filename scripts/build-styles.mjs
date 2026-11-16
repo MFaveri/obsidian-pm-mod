@@ -7,7 +7,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const entry = join(root, 'src/styles/index.css')
 const stylesDir = join(root, 'src/styles')
 
-const prod = Boolean(process.env['PRODUCTION'])
+const prod = Boolean(process.env['PRODUCTION']) || process.argv.includes('--production')
 const vaultPath = process.env['VAULT_PATH']
 const outDir = vaultPath ? `${vaultPath}/.obsidian/plugins/project-manager` : root
 const outFile = join(outDir, 'styles.css')

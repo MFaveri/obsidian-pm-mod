@@ -154,7 +154,7 @@ describe('snapshot kanban', () => {
     const host = document.body.createDiv()
     renderSnapshotKanban(host, model())
     const columns = host.querySelectorAll('.pm-kanban-col')
-    expect(columns.length).toBe(DEFAULT_STATUSES.length)
+    expect(columns.length).toBe(DEFAULT_STATUSES.filter((status) => status.id !== 'superseded').length)
     const byColumn = Array.from(columns).map((col) =>
       Array.from(col.querySelectorAll('.pm-kanban-card')).map((card) => (card as HTMLElement).dataset.taskId)
     )

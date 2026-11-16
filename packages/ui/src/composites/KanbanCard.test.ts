@@ -66,7 +66,7 @@ describe('status badge outside Obsidian', () => {
     badge.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 10, clientY: 20 }))
     const items = document.body.findAll('.menu .menu-item')
     expect(items.map((item) => item.find('.menu-item-title')?.textContent)).toEqual(
-      DEFAULT_STATUSES.map((status) => status.label)
+      DEFAULT_STATUSES.filter((status) => status.id !== 'superseded').map((status) => status.label)
     )
     expect(items[0].hasClass('mod-checked')).toBe(true)
 

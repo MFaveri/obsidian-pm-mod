@@ -20,7 +20,7 @@ export function includesSupersededFilter(filter: FilterState): boolean {
       c.field === 'status' &&
       (c.op === 'any' || c.op === 'all') &&
       Array.isArray(c.value) &&
-      c.value.includes('superseded')
+      c.value.some((v) => v === 'superseded')
   )
 }
 

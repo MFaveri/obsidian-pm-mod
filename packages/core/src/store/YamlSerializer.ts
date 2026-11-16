@@ -181,7 +181,7 @@ export function buildTaskFrontmatter(
   if (task.completed) fm.completed = task.completed
   if (task.replacedBy) fm.replacedBy = refs.dependency(task.replacedBy) ?? task.replacedBy
   if (task.replaces) fm.replaces = refs.dependency(task.replaces) ?? task.replaces
-  if (task.recurrence) fm.recurrence = task.recurrence = task.recurrence
+  if (task.recurrence) fm.recurrence = task.recurrence
   if (task.timeEstimate !== undefined) fm.timeEstimate = task.timeEstimate
   if (task.timeLogs?.length) fm.timeLogs = task.timeLogs
   if (Object.keys(task.customFields).length) fm.customFields = task.customFields
