@@ -3,9 +3,11 @@ import {
   type FlatTask,
   applyTaskFilterFlat,
   dueUrgency,
+  excludeSupersededTasks,
   flattenTasks,
   formatDateLong,
   getStatusConfig,
+  includesSupersededFilter,
   isQueryActive,
   isTerminalStatus,
   columnWidth,
@@ -56,7 +58,8 @@ export function tableRows(model: ViewModel): TreeRow[] {
   const config = mergedConfig(model)
   const query = queryOf(model)
   const hasActiveFilter = isQueryActive(query)
-  const flat = applyTaskFilterFlat(flattenTasks(allTasks(model)), query, filterContextOf(model))
+  const tasks = excludeSupersededTasks(allTasks(model), includesSupersededFilter(query.filter))
+  const flat = applyTaskFilterFlat(flattenTasks(tasks), query, filterContextOf(model))
   const filteredIds = new Set(flat.map((f) => f.task.id))
 
   const childrenByParent = new Map<string | null, FlatTask[]>()

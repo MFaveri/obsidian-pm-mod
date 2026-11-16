@@ -25,12 +25,13 @@ export function renderSubtasksPanel(
   const subList = subSection.createDiv('pm-modal-subtask-list')
 
   const renderCount = () => {
-    const total = task.subtasks.length
+    const effective = task.subtasks.filter((subtask) => subtask.status !== 'superseded')
+    const total = effective.length
     if (total === 0) {
       countEl.setText('')
       return
     }
-    const done = task.subtasks.filter((s) => isTerminalStatus(s.status, statuses)).length
+    const done = effective.filter((subtask) => isTerminalStatus(subtask.status, statuses)).length
     countEl.setText(`${done}/${total}`)
   }
 
@@ -41,15 +42,14 @@ export function renderSubtasksPanel(
 
       const done = isTerminalStatus(sub.status, statuses)
 
-      new Checkbox(row)
-        .setChecked(done)
-        .setAriaLabel(t('subtasks.done', { title: sub.title }))
-        .onChange((checked) => {
-          sub.status = checked ? getCompleteStatusId(statuses) : getDefaultStatusId(statuses)
-          sub.progress = checked ? 100 : 0
-          renderSubtasks()
-          renderCount()
-        })
+      const checkbox = new Checkbox(row).setChecked(done).setAriaLabel(t('subtasks.done', { title: sub.title }))
+      checkbox.el.disabled = sub.status === 'superseded'
+      checkbox.onChange((checked) => {
+        sub.status = checked ? getCompleteStatusId(statuses) : getDefaultStatusId(statuses)
+        sub.progress = checked ? 100 : 0
+        renderSubtasks()
+        renderCount()
+      })
 
       // A subtask typed into the add field below has no note yet, so there is nothing to
       // open until the editor saves.

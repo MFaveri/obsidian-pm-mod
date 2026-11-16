@@ -7,6 +7,7 @@ import {
   collectAllAssignees,
   collectAllTags,
   flattenTasks,
+  getDependencyCandidates,
   reaches,
   isTerminalStatus,
   priorityIcon,
@@ -63,6 +64,10 @@ const repeatOptions = (): SelectItem[] => [
 export function renderTaskFormFields(container: HTMLElement, ctx: TaskFormFieldsContext): void {
   const { task, project, plugin, rerender, shownExtras } = ctx
   const { statuses, priorities, priorityIcons, customFields } = plugin.store.configFor(project)
+  const selectableStatuses =
+    task.status === 'superseded'
+      ? statuses.filter((status) => status.id === 'superseded')
+      : statuses.filter((status) => status.id !== 'superseded')
   const grid = container.createDiv('pm-prop-grid')
 
   renderPropRow(
@@ -132,7 +137,12 @@ export function renderTaskFormFields(container: HTMLElement, ctx: TaskFormFields
       renderSelectControl({
         container: cell,
         value: task.status,
-        options: statuses.map((s) => ({ id: s.id, label: s.label, color: s.color, icon: s.icon || undefined })),
+        options: selectableStatuses.map((s) => ({
+          id: s.id,
+          label: s.label,
+          color: s.color,
+          icon: s.icon || undefined
+        })),
         onChange: (id) => {
           task.status = id
           rerender()
@@ -142,6 +152,30 @@ export function renderTaskFormFields(container: HTMLElement, ctx: TaskFormFields
     },
     'circle-dot'
   )
+
+  const historyLinks: Array<{ label: string; id: string | undefined; icon: string }> = [
+    { label: t('taskForm.replacedBy'), id: task.replacedBy, icon: 'arrow-right' },
+    { label: t('taskForm.replaces'), id: task.replaces, icon: 'arrow-left' }
+  ]
+  for (const history of historyLinks) {
+    if (!history.id) continue
+    const historyId = history.id
+    const linked = plugin.index.task(historyId)
+    renderPropRow(
+      grid,
+      history.label,
+      () => {
+        const cell = createDiv('pm-prop-value')
+        renderDepRow(cell, {
+          id: historyId,
+          title: linked?.title ?? historyId,
+          link: linked ? { path: linked.path, open: () => ctx.openTask(linked.path) } : undefined
+        })
+        return cell
+      },
+      history.icon
+    )
+  }
 
   renderPropRow(
     grid,
@@ -346,17 +380,22 @@ export function renderTaskFormFields(container: HTMLElement, ctx: TaskFormFields
       .map((f) => f.task)
       .filter((other) => other.id !== task.id)
     const ownIds = new Set(ownTasks.map((other) => other.id))
-    // Tasks in other projects can be depended on too, so the picker offers the whole
-    // vault, this project first and everything else labelled with its project.
+    const ownCandidateIds = new Set(getDependencyCandidates(project.tasks, task.id).map((candidate) => candidate.id))
+    // Tasks in other projects can be depended on too, so the picker offers active foreign tasks
+    // while preserving any historical ids already selected for removal.
     const foreign = plugin.index
       .allTaskRefs()
-      .filter((ref) => ref.id !== task.id && !ownIds.has(ref.id))
+      .filter(
+        (ref) =>
+          ref.id !== task.id && !ownIds.has(ref.id) && ref.status !== 'superseded' && !ref.replacedBy && !ref.archived
+      )
       .map((ref) => ({
         id: ref.id,
         label: ref.projectPath
           ? `${ref.title}  ·  ${plugin.index.projectRef(ref.projectPath)?.title ?? ''}`.trimEnd()
           : ref.title
       }))
+    const candidateIds = new Set([...ownCandidateIds, ...foreign.map((ref) => ref.id)])
     const allTasks: { id: string; label: string }[] = [
       ...ownTasks.map((other) => ({ id: other.id, label: other.title })),
       ...foreign
@@ -385,7 +424,9 @@ export function renderTaskFormFields(container: HTMLElement, ctx: TaskFormFields
             // this project and come back, so every candidate is checked against the vault.
             const edges = plugin.index.dependentsMap()
             return allTasks.filter(
-              (entry) => task.dependencies.includes(entry.id) || !reaches(edges, task.id, entry.id)
+              (entry) =>
+                task.dependencies.includes(entry.id) ||
+                (candidateIds.has(entry.id) && !reaches(edges, task.id, entry.id))
             )
           },
           add: (id) => {

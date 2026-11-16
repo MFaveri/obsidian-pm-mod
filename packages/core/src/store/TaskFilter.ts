@@ -14,7 +14,28 @@ export function countActiveFilters(filter: FilterState): number {
   return filter.conditions.length + (filter.showArchived ? 1 : 0)
 }
 
+export function includesSupersededFilter(filter: FilterState): boolean {
+  return filter.conditions.some(
+    (c) =>
+      c.field === 'status' &&
+      (c.op === 'any' || c.op === 'all') &&
+      Array.isArray(c.value) &&
+      c.value.includes('superseded')
+  )
+}
+
+export function excludeSupersededTasks(tasks: Task[], includeSuperseded = false): Task[] {
+  const result: Task[] = []
+  for (const task of tasks) {
+    if (task.status === 'superseded' && !includeSuperseded) continue
+    const subtasks = excludeSupersededTasks(task.subtasks, includeSuperseded)
+    result.push(subtasks.length === task.subtasks.length ? task : { ...task, subtasks })
+  }
+  return result
+}
+
 export function matchesQuery(task: Task, query: TaskQuery, ctx: FilterContext): boolean {
+  if (task.status === 'superseded' && !includesSupersededFilter(query.filter)) return false
   if (task.archived && !query.filter.showArchived) return false
   if (!query.filter.conditions.every((condition) => matchesCondition(task, condition, ctx))) return false
   return matchesSearch(task, query.text, ctx)

@@ -75,7 +75,8 @@ One column per status, or per priority, assignee, tag, type or custom field. Dra
 **Tasks**
 
 - Subtasks to any depth
-- Dependencies, within a project or across projects, and milestones
+- Dependencies, within a project or across projects (blocking active status transitions until terminal), and milestones
+- Replacement history: replace a task while preserving its history, redirecting dependents, and optionally duplicating subtasks
 - Start and due dates, progress, assignees, tags
 - Recurring tasks
 - Time estimates and time logs

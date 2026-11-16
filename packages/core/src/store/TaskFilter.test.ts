@@ -15,6 +15,7 @@ import {
   applyTaskFilterPromote,
   bestConditionToDrop,
   countActiveFilters,
+  excludeSupersededTasks,
   isConditionComplete,
   isQueryActive,
   matchesCondition,
@@ -210,6 +211,37 @@ describe('matchesQuery', () => {
     expect(matchesQuery(t, q, ctx)).toBe(false)
     q.filter.showArchived = true
     expect(matchesQuery(t, q, ctx)).toBe(true)
+  })
+
+  it('hides replaced tasks by default but shows them when explicitly filtered', () => {
+    const replaced = task({ id: 'replaced', status: 'superseded' })
+    expect(matchesQuery(replaced, query(), ctx)).toBe(false)
+    expect(matchesQuery(replaced, query([{ field: 'status', op: 'any', value: ['superseded'] }]), ctx)).toBe(true)
+  })
+
+  it('removes replaced tasks and their historical subtree without mutating the source', () => {
+    const child = task({ id: 'historical-child', status: 'todo' })
+    const replaced = task({ id: 'replaced', status: 'superseded', subtasks: [child] })
+    const active = task({ id: 'active', status: 'todo' })
+    const source = [replaced, active]
+
+    expect(excludeSupersededTasks(source).map((entry) => entry.id)).toEqual(['active'])
+    expect(source[0].subtasks).toEqual([child])
+  })
+
+  it('keeps replaced tasks when history mode is explicitly enabled', () => {
+    const replacedChild = task({ id: 'historical-child', status: 'todo' })
+    const replaced = task({ id: 'replaced', status: 'superseded', subtasks: [replacedChild] })
+    const active = task({ id: 'active', status: 'todo' })
+
+    expect(excludeSupersededTasks([replaced, active], true)).toEqual([replaced, active])
+  })
+
+  it('keeps active tasks and active subtasks', () => {
+    const child = task({ id: 'child', status: 'todo' })
+    const parent = task({ id: 'parent', status: 'todo', subtasks: [child] })
+
+    expect(excludeSupersededTasks([parent])).toEqual([parent])
   })
 
   it('needs every condition and the search to match', () => {

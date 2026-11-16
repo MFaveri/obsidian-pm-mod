@@ -12,7 +12,9 @@ import {
   type TaskQuery,
   type ViewFields,
   type ViewMode,
+  excludeSupersededTasks,
   flattenTasks,
+  includesSupersededFilter,
   shownFields,
   withDefault,
   tidyFields,
@@ -611,8 +613,13 @@ export class ProjectView extends ItemView {
     const scope = this.projectScope
     if (!scope) return { shown: 0, total: 0 }
     const ctx = scope.filterContext(personKeyer(this.plugin.app))
-    const all = flattenTasks(scope.tasks())
-    const total = all.filter((flat) => this.query.filter.showArchived || !flat.task.archived).length
+    const includeSuperseded = includesSupersededFilter(this.query.filter)
+    const all = flattenTasks(excludeSupersededTasks(scope.tasks(), includeSuperseded))
+    const total = all.filter(
+      (flat) =>
+        (this.query.filter.showArchived || !flat.task.archived) &&
+        (includeSuperseded || flat.task.status !== 'superseded')
+    ).length
     const shown = all.filter((flat) => matchesQuery(flat.task, this.query, ctx)).length
     return { shown, total }
   }
@@ -999,7 +1006,12 @@ export class ProjectView extends ItemView {
     const setup = this.groupSetup()
     const scope = this.projectScope
     if (!setup || !scope) return []
-    const candidates = boardCandidates(scope.tasks(), shownFields(this.fields, 'kanban', scope.fieldCatalog()))
+    const includeSuperseded = includesSupersededFilter(this.query.filter)
+    const candidates = boardCandidates(
+      scope.tasks(),
+      shownFields(this.fields, 'kanban', scope.fieldCatalog()),
+      includeSuperseded
+    )
     const shown = candidates.filter((task) => matchesQuery(task, this.query, setup.ctx))
     return boardColumns(setup, this.group, shown)
   }

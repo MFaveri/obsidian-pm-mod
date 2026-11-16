@@ -3,6 +3,7 @@ import {
   dueUrgency,
   flattenTasks,
   getPriorityConfig,
+  includesSupersededFilter,
   matchesQuery,
   shownFields,
   totalLoggedHours
@@ -64,8 +65,8 @@ export function renderSnapshotKanban(container: HTMLElement, model: ViewModel): 
   container.addClass('pm-kanban-view')
   const board = container.createDiv('pm-kanban-board')
   const fields = shownFields(model.fields, 'kanban', fieldCatalogOf(model))
-  const candidates = boardCandidates(allTasks(model), fields)
   const query = queryOf(model)
+  const candidates = boardCandidates(allTasks(model), fields, includesSupersededFilter(query.filter))
   const ctx = filterContextOf(model)
   const tasks = candidates
     .filter((task) => matchesQuery(task, query, ctx))

@@ -73,6 +73,8 @@ export interface Task {
   tags: string[]
   subtasks: Task[]
   dependencies: string[] // task IDs
+  replacedBy?: string // replacement task ID when status is superseded
+  replaces?: string // task ID this task supersedes
   recurrence?: Recurrence
   timeEstimate?: number // hours
   timeLogs?: TimeLog[]
@@ -403,13 +405,22 @@ export interface PMSettings {
   lastSeenVersion: string
 }
 
+export const SUPERSEDED_STATUS: StatusConfig = {
+  id: 'superseded',
+  label: 'Replaced',
+  color: '#767491',
+  icon: '',
+  complete: true
+}
+
 export const DEFAULT_STATUSES: StatusConfig[] = [
   { id: 'todo', label: 'To Do', color: '#8a94a0', icon: '', complete: false },
   { id: 'in-progress', label: 'In Progress', color: '#8b72be', icon: '', complete: false },
   { id: 'blocked', label: 'Blocked', color: '#c47070', icon: '', complete: false },
   { id: 'review', label: 'In Review', color: '#b8a06b', icon: '', complete: false },
   { id: 'done', label: 'Done', color: '#79b58d', icon: '', complete: true },
-  { id: 'cancelled', label: 'Cancelled', color: '#767491', icon: '', complete: true }
+  { id: 'cancelled', label: 'Cancelled', color: '#767491', icon: '', complete: true },
+  SUPERSEDED_STATUS
 ]
 
 export const DEFAULT_PRIORITIES: PriorityConfig[] = [
@@ -427,7 +438,8 @@ export function defaultStatuses(): StatusConfig[] {
     blocked: t('status.blocked'),
     review: t('status.review'),
     done: t('status.done'),
-    cancelled: t('status.cancelled')
+    cancelled: t('status.cancelled'),
+    superseded: t('status.superseded')
   }
   return DEFAULT_STATUSES.map((status) => ({ ...status, label: labels[status.id] ?? status.label }))
 }

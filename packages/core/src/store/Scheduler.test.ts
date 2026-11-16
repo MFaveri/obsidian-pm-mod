@@ -175,6 +175,22 @@ describe('computeSchedule', () => {
     expect(result.patches.map((p) => p.taskId)).toEqual(['y'])
   })
 
+  it('schedules stale references through the active replacement tail', () => {
+    const tasks = [
+      task({ id: 'old', status: 'superseded', start: '2026-04-01', due: '2026-04-10', replacedBy: 'current' }),
+      task({ id: 'current', start: '2026-04-01', due: '2026-04-20' }),
+      task({ id: 'target', start: '2026-04-05', due: '2026-04-06', dependencies: ['old'] })
+    ]
+
+    const result = computeSchedule(tasks, undefined, statuses)
+
+    expect(result.patches.find((patch) => patch.taskId === 'target')).toEqual({
+      taskId: 'target',
+      start: '2026-04-21',
+      due: '2026-04-22'
+    })
+  })
+
   it('ignores missing dependency ids silently', () => {
     const tasks = [task({ id: 'a', start: '2026-04-01', due: '2026-04-05', dependencies: ['ghost'] })]
     const result = computeSchedule(tasks, undefined, statuses)

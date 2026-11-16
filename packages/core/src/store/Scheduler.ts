@@ -60,6 +60,17 @@ export function wouldCreateCycle(tasks: Task[], fromId: string, toId: string): b
   return reaches(dependentsFromTasks(tasks), fromId, toId)
 }
 
+function resolveDependencyId(depId: string, taskById: Map<string, Task>): string | null {
+  const visited = new Set<string>()
+  let current = taskById.get(depId)
+  while (current?.status === 'superseded') {
+    if (visited.has(current.id) || !current.replacedBy) return null
+    visited.add(current.id)
+    current = taskById.get(current.replacedBy)
+  }
+  return current?.id ?? null
+}
+
 /**
  * Date patches derived from the dependency graph. `changed` scopes the pass to the
  * downstream dependents of the task ids it names. Terminal-status tasks never move;
@@ -89,15 +100,19 @@ export function computeSchedule(
   }
 
   for (const t of flat) {
-    const validDeps: string[] = []
+    const validDeps = new Set<string>()
     for (const depId of t.dependencies) {
-      if (!taskById.has(depId)) continue
-      validDeps.push(depId)
+      const resolvedId = resolveDependencyId(depId, taskById)
+      if (!resolvedId) continue
+      validDeps.add(resolvedId)
+    }
+    const normalizedDeps = [...validDeps]
+    predecessorsOf.set(t.id, normalizedDeps)
+    for (const depId of normalizedDeps) {
       const list = dependentsOf.get(depId) ?? []
       list.push(t.id)
       dependentsOf.set(depId, list)
     }
-    predecessorsOf.set(t.id, validDeps)
   }
 
   const seeds = changed === undefined ? [] : typeof changed === 'string' ? [changed] : changed

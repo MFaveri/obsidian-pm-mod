@@ -53,7 +53,11 @@ export function renderStatusBadge(
     .setDot(!config?.icon)
     .onClick((e) => {
       const menu = createMenu()
-      for (const s of statuses) {
+      const availableStatuses =
+        task.status === 'superseded'
+          ? statuses.filter((status) => status.id === 'superseded')
+          : statuses.filter((status) => status.id !== 'superseded')
+      for (const s of availableStatuses) {
         addPaletteMenuItem(menu, s, { checked: s.id === task.status, onClick: () => onChange(s.id) })
       }
       menu.showAtMouseEvent(e)

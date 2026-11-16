@@ -5,6 +5,7 @@ import {
   type PMSettings,
   DEFAULT_PALETTE_COLOR,
   DEFAULT_SETTINGS,
+  SUPERSEDED_STATUS,
   priorityIconSetLabels,
   makeId,
   flattenTasks,
@@ -628,6 +629,10 @@ export class PMSettingTab extends PluginSettingTab {
     const entries = field === 'status' ? this.plugin.settings.statuses : this.plugin.settings.priorities
     if (entries.length <= 1) {
       new Notice(t(field === 'status' ? 'settings.atLeastOneStatus' : 'settings.atLeastOnePriority'))
+      return
+    }
+    if (field === 'status' && entries[index]?.id === SUPERSEDED_STATUS.id) {
+      new Notice(t('settings.builtInSuperseded'))
       return
     }
     const [removed] = entries.splice(index, 1)

@@ -55,6 +55,12 @@ export interface TaskSource {
 
   insertTask(project: Project, task: Task, parentId?: string | null): Promise<void>
   duplicateTask(project: Project, sourceId: string, includeSubtasks: boolean): Promise<Task | null>
+  replaceTask(
+    project: Project,
+    sourceId: string,
+    replacement: Task,
+    options: { duplicateSubtasks: boolean }
+  ): Promise<void>
   /**
    * Gives the listed tasks fresh ids, remapping every reference the project holds to
    * them, and optionally the project's own id. Repairs a project whose folder was

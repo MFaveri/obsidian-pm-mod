@@ -49,6 +49,8 @@ export const TASK_FRONTMATTER_KEYS: ReadonlySet<string> = new Set([
   'tags',
   'subtaskIds',
   'dependencies',
+  'replacedBy',
+  'replaces',
   'createdAt',
   'updatedAt',
   'completed',
@@ -177,7 +179,9 @@ export function buildTaskFrontmatter(
     updatedAt: task.updatedAt
   }
   if (task.completed) fm.completed = task.completed
-  if (task.recurrence) fm.recurrence = task.recurrence
+  if (task.replacedBy) fm.replacedBy = refs.dependency(task.replacedBy) ?? task.replacedBy
+  if (task.replaces) fm.replaces = refs.dependency(task.replaces) ?? task.replaces
+  if (task.recurrence) fm.recurrence = task.recurrence = task.recurrence
   if (task.timeEstimate !== undefined) fm.timeEstimate = task.timeEstimate
   if (task.timeLogs?.length) fm.timeLogs = task.timeLogs
   if (Object.keys(task.customFields).length) fm.customFields = task.customFields

@@ -4,6 +4,7 @@ import {
   filterFieldLabel,
   filterKind,
   filterValue,
+  includesSupersededFilter,
   makeDefaultGroup,
   t,
   valueKey
@@ -53,8 +54,10 @@ export function groupValues(task: Task, field: string, setup: FilterSetup): stri
 export function boardColumns(setup: FilterSetup, group: GroupState, tasks: Task[]): BoardColumn[] {
   const field = boardField(setup, group)
   const kind = filterKind(field, setup.ctx.customFields)
+  const showSuperseded = includesSupersededFilter(setup.filter)
   const byKey = new Map<string, BoardColumn>()
   for (const option of valueOptions(setup, field)) {
+    if (field === 'status' && option.id === 'superseded' && !showSuperseded) continue
     byKey.set(valueKey(field, option.id, setup.ctx), { ...option, tasks: [], hidden: false })
   }
   const none: BoardColumn = {

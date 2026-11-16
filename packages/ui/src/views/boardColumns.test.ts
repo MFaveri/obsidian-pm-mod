@@ -30,7 +30,7 @@ const ids = (group: GroupState) =>
 describe('boardColumns', () => {
   it('makes one column per status, in the palette order, with no column for tasks without one', () => {
     const columns = boardColumns(setup, { field: 'status' }, tasks)
-    expect(columns.map((c) => c.id)).toEqual(DEFAULT_STATUSES.map((s) => s.id))
+    expect(columns.map((c) => c.id)).toEqual(DEFAULT_STATUSES.filter((s) => s.id !== 'superseded').map((s) => s.id))
     expect(columns[0].tasks.map((t) => t.id)).toEqual(['a', 'b'])
     expect(columns[0].color).toBe(DEFAULT_STATUSES[0].color)
   })
@@ -47,7 +47,7 @@ describe('boardColumns', () => {
     const group: GroupState = { field: 'cf:removed', columns: { status: { hidden: ['done'] } } }
     expect(boardField(setup, group)).toBe('status')
     const columns = boardColumns(setup, group, tasks)
-    expect(columns.map((c) => c.id)).toEqual(DEFAULT_STATUSES.map((s) => s.id))
+    expect(columns.map((c) => c.id)).toEqual(DEFAULT_STATUSES.filter((s) => s.id !== 'superseded').map((s) => s.id))
     expect(columns.find((c) => c.id === 'done')?.hidden).toBe(true)
     expect(boardField(setup, { field: 'cf:client' })).toBe('cf:client')
   })

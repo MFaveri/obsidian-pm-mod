@@ -1,9 +1,18 @@
-import { type CustomFieldDef, type Task, flattenTasks, formatDateLong, stringifyCustomValue, t } from '@dotpm/core'
+import {
+  type CustomFieldDef,
+  type Task,
+  excludeSupersededTasks,
+  flattenTasks,
+  formatDateLong,
+  stringifyCustomValue,
+  t
+} from '@dotpm/core'
 import type { CardFieldValue } from '../composites/KanbanCard'
 
 /** The tasks a board deals cards for: the top-level ones, or every task once subtasks get cards of their own. */
-export function boardCandidates(tasks: Task[], fields: string[]): Task[] {
-  return fields.includes('subtasks') ? flattenTasks(tasks).map((flat) => flat.task) : tasks
+export function boardCandidates(tasks: Task[], fields: string[], includeSuperseded = false): Task[] {
+  const active = excludeSupersededTasks(tasks, includeSuperseded)
+  return fields.includes('subtasks') ? flattenTasks(active).map((flat) => flat.task) : active
 }
 
 /** A description as one line of plain text, cut to what a card has room for. */

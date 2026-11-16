@@ -75,7 +75,14 @@ export function safeAsync<A extends unknown[]>(fn: (...args: A) => Promise<void>
         await fn(...args)
       } catch (err: unknown) {
         console.error('[PM]', err)
-        showNotice(t('common.somethingWentWrong'))
+        if (
+          err instanceof Error &&
+          (err.name === 'DependencyBlockedError' || err.name === 'ReplacementRequiredError')
+        ) {
+          showNotice(err.message)
+        } else {
+          showNotice(t('common.somethingWentWrong'))
+        }
       }
     })()
   }

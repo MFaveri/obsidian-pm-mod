@@ -6,6 +6,7 @@ import {
   type ResolvedProjectConfig,
   type Task,
   collectAllTags,
+  excludeSupersededTasks,
   flattenTasks,
   totalLoggedHours,
   Temporal,
@@ -148,7 +149,7 @@ export class ProjectOverviewView extends ItemView {
     this.treeSignature = this.signTree(project)
 
     const config = this.plugin.store.configFor(project)
-    const tasks = flattenTasks(project.tasks)
+    const tasks = flattenTasks(excludeSupersededTasks(project.tasks))
       .map((entry) => entry.task)
       .filter((task) => !task.archived)
     const rollup = summarize(tasks, config)

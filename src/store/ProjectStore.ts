@@ -16,6 +16,11 @@ import {
   sanitizeFileName,
   resolveProjectConfig,
   computeSchedule,
+  assertCanInsertTask,
+  assertCanTransitionTaskStatus,
+  getReplacementCandidates,
+  type DependencyNode,
+  wouldCreateReplacementCycle,
   findParentId,
   findTaskById,
   indexAddSubtree,
@@ -516,6 +521,8 @@ export class ProjectStore implements TaskSource {
           task.archived = true
         }
         task.dependencies = refListToIds(this.app, task.dependencies, source, idByPath)
+        if (task.replacedBy) task.replacedBy = refToId(this.app, task.replacedBy, source, idByPath)
+        if (task.replaces) task.replaces = refToId(this.app, task.replaces, source, idByPath)
         const subIds = refListToIds(this.app, subtaskIds, source, idByPath)
         const pid = parentId ? refToId(this.app, parentId, source, idByPath) : null
         taskMap.set(task.id, task)
@@ -985,12 +992,14 @@ export class ProjectStore implements TaskSource {
 
       const refs = this.refsFor(project, path)
       const parent = entry.parentId ? findTaskById(project, entry.parentId) : null
-      const next = {
+      const next: Record<string, unknown> = {
         projectId: refs.link(project.filePath, project.title),
         parentId: parent ? (refs.task(parent) ?? parent.id) : null,
         subtaskIds: entry.task.subtasks.map((s) => refs.task(s) ?? s.id),
         dependencies: entry.task.dependencies.map((depId) => refs.dependency(depId) ?? depId)
       }
+      if (entry.task.replacedBy) next.replacedBy = refs.dependency(entry.task.replacedBy) ?? entry.task.replacedBy
+      if (entry.task.replaces) next.replaces = refs.dependency(entry.task.replaces) ?? entry.task.replaces
       await this.writeRefFields(file, next)
     }
 
@@ -1013,7 +1022,52 @@ export class ProjectStore implements TaskSource {
     })
   }
 
+  private dependencyNode(task: Task | DependencyNode, statuses: StatusConfig[]): DependencyNode {
+    return {
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      dependencies: [...task.dependencies],
+      terminal: 'terminal' in task ? task.terminal : isTerminalStatus(task.status, statuses),
+      archived: task.archived,
+      replacedBy: task.replacedBy,
+      replaces: task.replaces
+    }
+  }
+
+  private dependencyNodes(project: Project, proposedTasks: Task[] = []): Map<string, DependencyNode> {
+    const nodes = new Map<string, DependencyNode>()
+    const globalComplete = new Set(
+      this.getSettings()
+        .statuses.filter((status) => status.complete)
+        .map((status) => status.id)
+    )
+    for (const ref of this.index?.allTaskRefs() ?? []) {
+      const owner = ref.projectPath ? this.index?.projectRef(ref.projectPath) : null
+      const complete = owner ? (this.index?.completeStatuses(owner) ?? globalComplete) : globalComplete
+      nodes.set(
+        ref.id,
+        this.dependencyNode({ ...ref, terminal: complete.has(ref.status) }, this.getSettings().statuses)
+      )
+    }
+    const statuses = this.statusesFor(project)
+    for (const { task } of flattenTasks(project.tasks)) nodes.set(task.id, this.dependencyNode(task, statuses))
+    for (const task of proposedTasks) nodes.set(task.id, this.dependencyNode(task, statuses))
+    return nodes
+  }
+
   async insertTask(project: Project, task: Task, parentId: string | null = null): Promise<void> {
+    const existing = findTaskById(project, task.id)
+    if (existing) {
+      if (existing !== task) throw new Error(`A task with ID "${task.id}" already exists.`)
+      await this.saveProject(project)
+      return
+    }
+    assertCanInsertTask(
+      this.dependencyNode(task, this.statusesFor(project)),
+      this.dependencyNodes(project, [task]),
+      this.statusesFor(project)
+    )
     if (!task.completed && isTerminalStatus(task.status, this.statusesFor(project))) {
       task.completed = today().toString()
     }
@@ -1162,6 +1216,126 @@ export class ProjectStore implements TaskSource {
     if (parentId) this.markDirty(project, [parentId], 'full')
     await this.saveProject(project)
     return copy
+  }
+
+  async replaceTask(
+    project: Project,
+    sourceId: string,
+    replacement: Task,
+    options: { duplicateSubtasks: boolean }
+  ): Promise<void> {
+    const source = findTaskById(project, sourceId)
+    if (!source) throw new Error('Task to replace was not found.')
+    if (source.status === 'superseded' || source.replacedBy) {
+      throw new Error('This task is already replaced. Replace its current successor instead.')
+    }
+    if (source.id === replacement.id) throw new Error('A task cannot replace itself.')
+    if (replacement.dependencies.includes(replacement.id)) {
+      throw new Error('A replacement cannot depend on itself.')
+    }
+
+    const existingReplacement = findTaskById(project, replacement.id)
+    const isExisting = existingReplacement !== null
+    const allTasks = flattenTasks(project.tasks).map((entry) => entry.task)
+    if (
+      isExisting &&
+      !getReplacementCandidates(source, allTasks, this.statusesFor(project)).some(
+        (candidate) => candidate.id === replacement.id
+      )
+    ) {
+      throw new Error('The selected task is not a valid replacement candidate.')
+    }
+    if (!isExisting) {
+      const conflict = this.findTaskFileConflict(project, replacement)
+      if (conflict) throw conflict
+    }
+    if (source.dependencies.includes(replacement.id)) {
+      throw new Error('A prerequisite of the original task cannot replace it.')
+    }
+
+    const externalDependents: { project: Project; task: Task }[] = []
+    for (const ref of this.index?.dependents(source.id) ?? []) {
+      if (!ref.projectPath || ref.projectPath === project.filePath) continue
+      const externalProject = await this.loadProjectByPath(ref.projectPath)
+      const externalTask = externalProject ? findTaskById(externalProject, ref.id) : null
+      if (!externalProject || !externalTask) {
+        throw new Error(`Could not load dependent task "${ref.title}" for redirection.`)
+      }
+      externalDependents.push({ project: externalProject, task: externalTask })
+    }
+
+    const replacementDependencies = [
+      ...new Set([...replacement.dependencies.filter((id) => id !== source.id), ...source.dependencies])
+    ]
+    if (
+      wouldCreateReplacementCycle(
+        [...this.dependencyNodes(project).values()],
+        source.id,
+        replacement.id,
+        replacementDependencies
+      )
+    ) {
+      throw new Error('The replacement would create a dependency cycle.')
+    }
+
+    if (!isExisting) {
+      replacement.priority = source.priority
+      replacement.assignees = [...source.assignees]
+      replacement.tags = [...source.tags]
+      replacement.customFields = { ...source.customFields }
+    }
+    replacement.dependencies = replacementDependencies
+    replacement.replaces = source.id
+    replacement.updatedAt = new Date().toISOString()
+    if (options.duplicateSubtasks) {
+      const clones = cloneTaskForest(source.subtasks)
+      const baseFolder = projectTaskFolder(this.app, project.filePath)
+      const claimed = new Set<string>()
+      const usedTitles = new Set(flattenTasks(project.tasks).map((entry) => entry.task.title))
+      for (const { task } of flattenTasks(clones)) {
+        const folder = task.archived ? normalizePath(baseFolder + '/Archive') : baseFolder
+        this.assignCopyName(task, folder, usedTitles, claimed)
+      }
+      replacement.subtasks.push(...clones)
+    }
+
+    source.status = 'superseded'
+    source.completed = today().toString()
+    source.replacedBy = replacement.id
+    source.updatedAt = new Date().toISOString()
+
+    const changedDependents: string[] = []
+    for (const { task } of flattenTasks(project.tasks)) {
+      if (task.id === source.id || task.id === replacement.id || !task.dependencies.includes(source.id)) continue
+      task.dependencies = [...new Set(task.dependencies.map((id) => (id === source.id ? replacement.id : id)))]
+      task.updatedAt = new Date().toISOString()
+      changedDependents.push(task.id)
+    }
+
+    for (const { project: externalProject, task: externalTask } of externalDependents) {
+      externalTask.dependencies = [
+        ...new Set(externalTask.dependencies.map((id) => (id === source.id ? replacement.id : id)))
+      ]
+      externalTask.updatedAt = new Date().toISOString()
+      this.markDirty(externalProject, [externalTask.id], 'fm')
+    }
+
+    if (!isExisting) {
+      const parentId = findParentId(project, source.id)
+      addTaskToTree(project.tasks, replacement, parentId)
+      moveTaskInTree(project.tasks, replacement.id, source.id, 'after')
+      indexAddSubtree(project, replacement, parentId)
+      this.hydratedBodies.add(replacement)
+      if (parentId) this.markDirty(project, [parentId], 'full')
+    } else {
+      indexAddSubtree(project, replacement, findParentId(project, replacement.id))
+    }
+    for (const { task } of flattenTasks(replacement.subtasks)) this.hydratedBodies.add(task)
+
+    this.markDirty(project, [source.id, ...changedDependents], 'fm')
+    this.markSubtreeDirty(project, replacement.id, 'full')
+    await this.saveProject(project)
+    for (const { project: externalProject } of externalDependents) await this.saveProject(externalProject)
   }
 
   /**
@@ -1318,6 +1492,40 @@ export class ProjectStore implements TaskSource {
     await this.saveProject(project)
   }
 
+  private validateTaskStatusChanges(project: Project, task: Task, patch: Partial<Task>): void {
+    const proposedTask = { ...task, ...patch, subtasks: patch.subtasks ?? task.subtasks }
+    const proposedTasks = patch.subtasks
+      ? [proposedTask, ...flattenTasks(patch.subtasks).map((entry) => entry.task)]
+      : [proposedTask]
+    const nodes = this.dependencyNodes(project, proposedTasks)
+    const statuses = this.statusesFor(project)
+    if (patch.status !== undefined) {
+      assertCanTransitionTaskStatus(
+        this.dependencyNode(task, statuses),
+        patch.status,
+        nodes,
+        statuses,
+        this.dependencyNode(proposedTask, statuses)
+      )
+    }
+    if (!patch.subtasks) return
+    for (const { task: proposed } of flattenTasks(patch.subtasks)) {
+      const current = findTaskById(project, proposed.id)
+      if (!current) {
+        assertCanInsertTask(this.dependencyNode(proposed, statuses), nodes, statuses)
+        continue
+      }
+      if (proposed.status === current.status) continue
+      assertCanTransitionTaskStatus(
+        this.dependencyNode(current, statuses),
+        proposed.status,
+        nodes,
+        statuses,
+        this.dependencyNode(proposed, statuses)
+      )
+    }
+  }
+
   /**
    * Stamp or clear `completed` when a status crosses the complete boundary, mutating
    * `patch` so it lands in the same save. An explicit `completed` in the patch wins.
@@ -1361,6 +1569,7 @@ export class ProjectStore implements TaskSource {
       const conflict = this.findTaskFileConflict(project, { ...task, ...patch })
       if (conflict) throw conflict
     }
+    if (task) this.validateTaskStatusChanges(project, task, patch)
     if (task) this.stampCompletion(project, task, patch)
     const completionMoved = task !== null && this.completionMoved(task, patch)
     // The editor saves the whole task, so snapshot the subtree to diff against.
@@ -1419,14 +1628,19 @@ export class ProjectStore implements TaskSource {
     taskIds: string[],
     patch: Partial<Task> | ((task: Task) => Partial<Task> | null)
   ): Promise<void> {
-    const completionMovedIds: string[] = []
+    const updates: { id: string; task: Task; patch: Partial<Task> }[] = []
     for (const id of taskIds) {
       const task = findTaskById(project, id)
       if (!task) continue
       const raw = typeof patch === 'function' ? patch(task) : patch
       if (!raw) continue
-      // Copy before stamping so one task's completion date doesn't bleed onto the next.
       const p = { ...raw }
+      this.validateTaskStatusChanges(project, task, p)
+      updates.push({ id, task, patch: p })
+    }
+
+    const completionMovedIds: string[] = []
+    for (const { id, task, patch: p } of updates) {
       this.stampCompletion(project, task, p)
       if (this.completionMoved(task, p)) completionMovedIds.push(id)
       const oldTitle = task.title

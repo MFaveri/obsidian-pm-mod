@@ -2,7 +2,13 @@ import { Menu, Notice } from 'obsidian'
 import type PMPlugin from '#main'
 import { type Task, type Project, t } from '@dotpm/core'
 import { safeAsync } from '@dotpm/ui'
-import { openTaskModal, confirmDialog, confirmDuplicateSubtasks, openProjectPicker } from './ModalFactory'
+import {
+  openTaskModal,
+  openReplaceTaskModal,
+  confirmDialog,
+  confirmDuplicateSubtasks,
+  openProjectPicker
+} from './ModalFactory'
 
 export interface TaskMenuContext {
   plugin: PMPlugin
@@ -37,6 +43,18 @@ export function buildTaskContextMenu(menu: Menu, task: Task, ctx: TaskMenuContex
         })
       })
   )
+  if (task.status !== 'superseded') {
+    menu.addItem((item) =>
+      item
+        .setTitle(t('taskMenu.replace'))
+        .setIcon('replace')
+        .onClick(() => {
+          openReplaceTaskModal(ctx.plugin, ctx.project, task, async () => {
+            await ctx.onRefresh()
+          })
+        })
+    )
+  }
   menu.addItem((item) =>
     item
       .setTitle(t('taskMenu.duplicate'))

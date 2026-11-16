@@ -6,6 +6,7 @@ import { TaskModal } from '#modals/TaskModal'
 import { PersonLookupModal, ProjectPickerModal, TaskPickerModal } from '#modals/PickerModals'
 import { ImportModal } from '#modals/ImportModal'
 import { ProjectCreateModal } from '#modals/ProjectCreateModal'
+import { ReplaceTaskModal } from '#modals/ReplaceTaskModal'
 
 export function confirmDialog(app: App, message: string, confirmLabel = t('common.delete')): Promise<boolean> {
   return new Promise((resolve) => {
@@ -266,6 +267,15 @@ export async function openTaskByPath(plugin: PMPlugin, filePath: string, onSave?
     return
   }
   openTaskModal(plugin, project, { task, onSave: () => onSave?.() })
+}
+
+export function openReplaceTaskModal(
+  plugin: PMPlugin,
+  project: Project,
+  source: Task,
+  onComplete: (replacement: Task) => void | Promise<void>
+): void {
+  new ReplaceTaskModal(plugin.app, plugin, project, source, onComplete).open()
 }
 
 export function openProjectCreate(plugin: PMPlugin): void {

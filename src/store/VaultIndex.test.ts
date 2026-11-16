@@ -139,6 +139,15 @@ describe('VaultIndex', () => {
     expect(index.counts(expectDefined(index.projectRef('Projects/Roadmap.md')))).toEqual({ total: 2, done: 1 })
   })
 
+  it('excludes replaced tasks from project counts while keeping active tasks', async () => {
+    await vault.create('Projects/Roadmap.md', projectNote('p1', 'Roadmap'))
+    await vault.create('Projects/Roadmap_tasks/old.md', taskNote('t1', 'Old', 'p1', 'superseded'))
+    await vault.create('Projects/Roadmap_tasks/current.md', taskNote('t2', 'Current', 'p1', 'todo'))
+    index.build()
+
+    expect(index.counts(expectDefined(index.projectRef('Projects/Roadmap.md')))).toEqual({ total: 1, done: 0 })
+  })
+
   it('leaves archived tasks out of a project row', async () => {
     await vault.create('Projects/Roadmap.md', projectNote('p1', 'Roadmap'))
     await vault.create('Projects/Roadmap_tasks/a.md', taskNote('t1', 'A', 'p1', 'todo', '2020-01-01'))

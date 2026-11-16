@@ -18,6 +18,9 @@ import {
   type Task,
   makeTask,
   flattenTasks,
+  findTask,
+  DependencyBlockedError,
+  ReplacementRequiredError,
   getDefaultStatusId,
   getDefaultPriorityId,
   getPriorityConfig,
@@ -26,7 +29,7 @@ import {
 import { TaskFileNameConflictError } from '#store'
 import { safeAsync, renderGlyph } from '@dotpm/ui'
 import { saveShortcutLabel } from '../utils'
-import { confirmDialog, openTaskByPath } from '#ui/ModalFactory'
+import { confirmDialog, openReplaceTaskModal, openTaskByPath } from '#ui/ModalFactory'
 import { renderTaskFormFields } from './TaskFormFields'
 import { renderTimeTrackingPanel } from './TimeTrackingPanel'
 import { renderSubtasksPanel } from './SubtasksPanel'
@@ -119,7 +122,7 @@ export class TaskEditor {
       if (conflict) {
         new Notice(t('taskEditor.notSavedConflict', { name: conflict.fileName }))
       } else {
-        void this.persistTask()
+        void this.persistOnClose()
       }
     }
     if (this.saveKeyHandler) {
@@ -184,6 +187,8 @@ export class TaskEditor {
   private async runPersist(): Promise<void> {
     if (this.isNew) {
       await this.plugin.store.insertTask(this.project, this.task, this.parentId)
+      this.isNew = false
+      this.originalParentId = this.parentId
     } else {
       const patch = this.changedFields()
       const moved = this.parentId !== this.originalParentId
@@ -192,7 +197,39 @@ export class TaskEditor {
       if (moved) await this.plugin.store.moveTask(this.project, this.task.id, this.parentId)
     }
     await this.plugin.store.scheduleAfterChange(this.project, this.task.id)
-    await this.onSave(this.task)
+  }
+
+  private async persistOnClose(): Promise<void> {
+    try {
+      await this.persistTask()
+      this.notifySaved()
+    } catch (err) {
+      this.reportSaveError(err)
+    }
+  }
+
+  private notifySaved(): void {
+    void (async () => {
+      try {
+        await this.onSave(this.task)
+      } catch (err) {
+        console.error('[PM] View refresh after save failed', err)
+        new Notice(t('taskEditor.refreshFailed'))
+      }
+    })()
+  }
+
+  private reportSaveError(err: unknown): void {
+    if (err instanceof TaskFileNameConflictError) {
+      new Notice(t('taskEditor.notSavedConflict', { name: err.fileName }))
+      return
+    }
+    if (err instanceof DependencyBlockedError || err instanceof ReplacementRequiredError) {
+      new Notice(err.message)
+      return
+    }
+    console.error('[PM]', err)
+    new Notice(t('common.somethingWentWrong'))
   }
 
   /**
@@ -237,6 +274,7 @@ export class TaskEditor {
                 await this.persistTask()
                 this.saved = true
                 this.host.close()
+                this.notifySaved()
                 await this.plugin.router.openTask({ filePath })
               })
             )
@@ -252,6 +290,27 @@ export class TaskEditor {
             this.host.close()
             void this.plugin.openAsMarkdown(filePath)
           })
+      )
+      menu.addSeparator()
+    }
+    if (!this.isNew && this.task.status !== 'superseded') {
+      menu.addItem((item) =>
+        item
+          .setTitle(t('taskMenu.replace'))
+          .setIcon('replace')
+          .onClick(
+            safeAsync(async () => {
+              await this.persistTask()
+              const source = findTask(this.project.tasks, this.task.id)
+              if (!source) return
+              this.saved = true
+              this.host.close()
+              this.notifySaved()
+              openReplaceTaskModal(this.plugin, this.project, source, async () => {
+                await this.onSave(source)
+              })
+            })
+          )
       )
       menu.addSeparator()
     }
@@ -659,9 +718,14 @@ export class TaskEditor {
         await this.persistTask()
         this.saved = true
         this.host.close()
+        this.notifySaved()
       } catch (err) {
         if (err instanceof TaskFileNameConflictError) {
           showTitleError(t('taskEditor.titleConflict', { name: err.fileName }))
+          return
+        }
+        if (err instanceof DependencyBlockedError || err instanceof ReplacementRequiredError) {
+          new Notice(err.message)
           return
         }
         console.error('[PM]', err)

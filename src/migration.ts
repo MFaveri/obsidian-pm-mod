@@ -93,7 +93,7 @@ export async function migrateBoardCardConfig(plugin: PMPlugin): Promise<void> {
   if (changed) await plugin.saveSettings()
 }
 
-const REF_KEYS = ['projectId', 'parentId', 'subtaskIds', 'dependencies', 'taskIds']
+const REF_KEYS = ['projectId', 'parentId', 'subtaskIds', 'dependencies', 'replacedBy', 'replaces', 'taskIds']
 
 function holdsBareId(frontmatter: Record<string, unknown> | undefined): boolean {
   if (!frontmatter) return false

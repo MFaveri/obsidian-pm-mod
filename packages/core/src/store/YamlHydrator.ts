@@ -238,6 +238,8 @@ export function mapRawToTask(r: Record<string, unknown>, overrides?: Partial<Tas
     tags: stringList(r.tags),
     subtasks: [],
     dependencies: stringList(r.dependencies),
+    replacedBy: typeof r.replacedBy === 'string' && r.replacedBy ? r.replacedBy : undefined,
+    replaces: typeof r.replaces === 'string' && r.replaces ? r.replaces : undefined,
     recurrence:
       r.recurrence && typeof r.recurrence === 'object'
         ? ({ ...(r.recurrence as Task['recurrence']) } as Task['recurrence'])

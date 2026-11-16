@@ -2,7 +2,9 @@ import {
   type GanttGranularity,
   type Task,
   applyTaskFilterPromote,
+  excludeSupersededTasks,
   flattenTasks,
+  includesSupersededFilter,
   shownFields,
   today,
   t
@@ -54,7 +56,12 @@ const granularities = (): { id: GanttGranularity; label: string }[] => [
 const noop = (): void => {}
 
 function visibleTasks(model: ViewModel): Task[] {
-  return applyTaskFilterPromote(allTasks(model), queryOf(model), filterContextOf(model))
+  const query = queryOf(model)
+  return applyTaskFilterPromote(
+    excludeSupersededTasks(allTasks(model), includesSupersededFilter(query.filter)),
+    query,
+    filterContextOf(model)
+  )
 }
 
 function renderLabel(container: HTMLElement, model: ViewModel, task: Task, depth: number): void {

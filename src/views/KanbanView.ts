@@ -13,6 +13,7 @@ import {
   shownFields,
   valueKey,
   flattenTasks,
+  includesSupersededFilter,
   totalLoggedHours,
   matchesQuery,
   dueUrgency,
@@ -125,7 +126,8 @@ export class KanbanView implements SubView {
 
   /** Descriptions load lazily from the note body, so previews fill in on a second render. */
   private async hydrateDescriptions(): Promise<void> {
-    const pending = boardCandidates(this.scope.tasks(), this.cardFields).filter(
+    const includeSuperseded = includesSupersededFilter(this.query.filter)
+    const pending = boardCandidates(this.scope.tasks(), this.cardFields, includeSuperseded).filter(
       (t) => t.filePath && !t.description && matchesQuery(t, this.query, this.filterContext)
     )
     if (!pending.length) return
@@ -134,7 +136,8 @@ export class KanbanView implements SubView {
   }
 
   private visibleTasks(): Task[] {
-    return boardCandidates(this.scope.tasks(), this.cardFields)
+    const includeSuperseded = includesSupersededFilter(this.query.filter)
+    return boardCandidates(this.scope.tasks(), this.cardFields, includeSuperseded)
       .filter((task) => matchesQuery(task, this.query, this.filterContext))
       .sort((a, b) => compareTasks(a, b, this.sort, this.config.statuses, this.config.priorities))
   }

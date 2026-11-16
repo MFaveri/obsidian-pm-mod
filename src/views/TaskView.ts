@@ -101,7 +101,7 @@ export class TaskView extends ItemView {
       project,
       task,
       parentId ?? null,
-      () => {},
+      () => this.plugin.refreshViews(),
       { surface: 'tab', close: () => this.leaf.detach(), scope: this.keyScope },
       defaults
     )

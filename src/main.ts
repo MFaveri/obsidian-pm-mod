@@ -4,6 +4,7 @@ import {
   DEFAULT_SETTINGS,
   defaultPriorities,
   defaultStatuses,
+  ensureSupersededStatus,
   makeDefaultFilter,
   makeDefaultGroup,
   makeDefaultSort,
@@ -426,7 +427,7 @@ export default class PMPlugin extends Plugin {
     if (!this.settings.collapsedProjects) this.settings.collapsedProjects = []
     if (!this.settings.excludedFolders) this.settings.excludedFolders = []
 
-    let migrated = false
+    let migrated = ensureSupersededStatus(this.settings.statuses)
     // Filters were keyed by project path before a view could cover several projects.
     for (const key of Object.keys(this.settings.projectFilters)) {
       if (key.includes(':')) continue

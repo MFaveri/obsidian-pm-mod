@@ -452,12 +452,23 @@ button.pm-icon-trigger {
   overflow: hidden;
 }
 
-/* The editor draws its own close button, so the native corner one would be a second X. */
+/* The editor draws its own close button, so the native corner one would be a second X.
+   Obsidian has used both button class names and more than one modal nesting shape. */
 .pm-modal--task .modal-close-button,
 .pm-modal--task .modal-header-button,
+.pm-modal--task .modal-container .modal-close-button,
+.pm-modal--task .modal-container .modal-header-button,
 .pm-modal--create .modal-close-button,
-.pm-modal--create .modal-header-button {
-  display: none;
+.pm-modal--create .modal-header-button,
+.modal-container:has(.pm-modal--task) .modal-close-button,
+.modal-container:has(.pm-modal--task) .modal-header-button,
+.modal:has(.pm-modal--task) .modal-close-button,
+.modal:has(.pm-modal--task) .modal-header-button,
+.modal-container:has(.pm-modal--create) .modal-close-button,
+.modal-container:has(.pm-modal--create) .modal-header-button,
+.modal:has(.pm-modal--create) .modal-close-button,
+.modal:has(.pm-modal--create) .modal-header-button {
+  display: none !important;
 }
 
 /* The empty native .modal-header still carries a margin-bottom, which pushes our own

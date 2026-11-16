@@ -361,6 +361,205 @@ describe('ProjectStore round-trip', () => {
     expect(expectDefined(findTask(reloaded.tasks, parent.id)).subtasks.map((s) => s.id)).toEqual([child.id])
   })
 
+  it('does not insert the same task twice when persistence is retried', async () => {
+    const { store } = newStore()
+    const project = await store.createProject('Idempotent insert', 'Projects')
+    const task = makeTask({ title: 'Only once' })
+
+    await store.insertTask(project, task)
+    await store.insertTask(project, task)
+
+    expect(project.tasks).toHaveLength(1)
+    expect(project.tasks[0]).toBe(task)
+  })
+
+  it('blocks an active task until every dependency is terminal', async () => {
+    const { store } = newStore()
+    const project = await store.createProject('Guarded', 'Projects')
+    const first = await addNamed(store, project, 'Approve design')
+    const second = await addNamed(store, project, 'Buy material')
+    const target = makeTask({ title: 'Start production', dependencies: [first.id, second.id] })
+    await store.insertTask(project, target)
+
+    await expect(store.updateTask(project, target.id, { status: 'in-progress' })).rejects.toThrow(
+      'Approve design; Buy material'
+    )
+    expect(target.status).toBe('todo')
+
+    await store.updateTask(project, first.id, { status: 'done' })
+    await expect(store.updateTask(project, target.id, { status: 'in-progress' })).rejects.toThrow('Buy material')
+    await store.updateTask(project, second.id, { status: 'done' })
+    await store.updateTask(project, target.id, { status: 'in-progress' })
+    expect(target.status).toBe('in-progress')
+  })
+
+  it('enforces dependencies on tasks from another project through the vault index', async () => {
+    const { store, index } = newIndexedStore()
+    const upstream = await store.createProject('External blocker', 'Projects')
+    const downstream = await store.createProject('External target', 'Projects')
+    const blocker = await addNamed(store, upstream, 'External approval')
+    const target = makeTask({ title: 'External work', dependencies: [blocker.id] })
+    await store.insertTask(downstream, target)
+    index.build()
+
+    await expect(store.updateTask(downstream, target.id, { status: 'in-progress' })).rejects.toThrow(
+      'External approval'
+    )
+    await store.updateTask(upstream, blocker.id, { status: 'done' })
+    index.build()
+    await store.updateTask(downstream, target.id, { status: 'in-progress' })
+    expect(target.status).toBe('in-progress')
+  })
+
+  it('uses the owning project palette for a custom terminal dependency status', async () => {
+    const { store, index } = newIndexedStore()
+    const upstream = await store.createProject('Custom source', 'Projects')
+    const downstream = await store.createProject('Custom target', 'Projects')
+    upstream.config = {
+      statuses: [
+        { id: 'todo', label: 'Todo', color: '#888', icon: '', complete: false },
+        { id: 'shipped', label: 'Shipped', color: '#0a0', icon: '', complete: true }
+      ]
+    }
+    await store.saveProject(upstream)
+    const blocker = makeTask({ title: 'Custom blocker', status: 'shipped' })
+    await store.insertTask(upstream, blocker)
+    const target = makeTask({ title: 'Target', dependencies: [blocker.id] })
+    await store.insertTask(downstream, target)
+    index.build()
+
+    await store.updateTask(downstream, target.id, { status: 'in-progress' })
+    expect(target.status).toBe('in-progress')
+  })
+
+  it('blocks a subtask that depends on a sibling subtask', async () => {
+    const { store } = newStore()
+    const project = await store.createProject('Nested guarded', 'Projects')
+    const first = makeTask({ title: 'Subtask A', type: 'subtask' })
+    const second = makeTask({ title: 'Subtask B', type: 'subtask', dependencies: [first.id] })
+    const parent = makeTask({ title: 'Parent', subtasks: [first, second] })
+    await store.insertTask(project, parent)
+
+    await expect(store.updateTask(project, second.id, { status: 'in-progress' })).rejects.toThrow('Subtask A')
+    await store.updateTask(project, first.id, { status: 'done' })
+    await store.updateTask(project, second.id, { status: 'in-progress' })
+    expect(second.status).toBe('in-progress')
+  })
+
+  it('does not partially apply a bulk status update when a later task is blocked', async () => {
+    const { store } = newStore()
+    const project = await store.createProject('Atomic bulk', 'Projects')
+    const independent = await addNamed(store, project, 'Independent')
+    const blocker = await addNamed(store, project, 'Required')
+    const blocked = makeTask({ title: 'Blocked task', dependencies: [blocker.id] })
+    await store.insertTask(project, blocked)
+
+    await expect(store.updateTasks(project, [independent.id, blocked.id], { status: 'in-progress' })).rejects.toThrow(
+      'Required'
+    )
+    expect(independent.status).toBe('todo')
+    expect(blocked.status).toBe('todo')
+  })
+
+  it('creates a replacement and redirects dependent tasks', async () => {
+    const { store } = newStore()
+    const project = await store.createProject('Replacement core', 'Projects')
+    const prerequisite = await addNamed(store, project, 'Prerequisite')
+    const child = makeTask({ title: 'Old child', type: 'subtask' })
+    const source = makeTask({
+      title: 'Original',
+      priority: 'high',
+      assignees: ['Alice'],
+      tags: ['design'],
+      dependencies: [prerequisite.id],
+      subtasks: [child]
+    })
+    await store.insertTask(project, source)
+    const dependent = makeTask({ title: 'Downstream', dependencies: [source.id] })
+    await store.insertTask(project, dependent)
+    const replacement = makeTask({ title: 'Replacement', start: '', due: '' })
+
+    await store.replaceTask(project, source.id, replacement, { duplicateSubtasks: false })
+
+    expect(source).toMatchObject({ status: 'superseded', replacedBy: replacement.id })
+    expect(replacement).toMatchObject({
+      replaces: source.id,
+      priority: 'high',
+      assignees: ['Alice'],
+      tags: ['design'],
+      dependencies: [prerequisite.id],
+      subtasks: []
+    })
+    expect(dependent.dependencies).toEqual([replacement.id])
+  })
+
+  it('redirects dependents in other projects when a task is replaced', async () => {
+    const { store, index, app } = newIndexedStore()
+    const upstream = await store.createProject('Source project', 'Projects')
+    const downstream = await store.createProject('Downstream project', 'Projects')
+    const source = await addNamed(store, upstream, 'Original')
+    const dependent = makeTask({ title: 'External dependent', dependencies: [source.id] })
+    await store.insertTask(downstream, dependent)
+    index.build()
+    const replacement = makeTask({ title: 'Replacement', start: '', due: '' })
+
+    await store.replaceTask(upstream, source.id, replacement, { duplicateSubtasks: false })
+
+    expect(dependent.dependencies).toEqual([replacement.id])
+    const reloadedStore = new ProjectStore(app, () => SETTINGS)
+    const reloaded = await reloadedStore.loadProject(fileAt(app, downstream.filePath))
+    const reloadedDependent = reloaded ? findTask(reloaded.tasks, dependent.id) : null
+    expect(reloadedDependent?.dependencies).toEqual([replacement.id])
+  })
+
+  it('can replace a task after its legacy filename is renamed by title', async () => {
+    const { store, vault } = newStore()
+    const project = await store.createProject('Legacy rename', 'Projects')
+    const source = await addNamed(store, project, 'New Task')
+    await store.updateTask(project, source.id, { title: '7' })
+    expect(source.filePath).toBe('Projects/Legacy rename/_tasks/7.md')
+    expect(vault.getAbstractFileByPath('Projects/Legacy rename/_tasks/new-task.md')).toBeNull()
+
+    const replacement = makeTask({ title: '7 (replacement)', start: '', due: '' })
+    await store.replaceTask(project, source.id, replacement, { duplicateSubtasks: false })
+
+    expect(source.replacedBy).toBe(replacement.id)
+    expect(vault.getAbstractFileByPath(expectDefined(replacement.filePath))).not.toBeNull()
+  })
+
+  it('preserves dependencies between duplicated sibling subtasks', async () => {
+    const { store } = newStore()
+    const project = await store.createProject('Clone links', 'Projects')
+    const first = makeTask({ title: 'Step A', type: 'subtask' })
+    const second = makeTask({ title: 'Step B', type: 'subtask', dependencies: [first.id] })
+    const source = makeTask({ title: 'Original', subtasks: [first, second] })
+    await store.insertTask(project, source)
+    const replacement = makeTask({ title: 'Replacement', start: '', due: '' })
+
+    await store.replaceTask(project, source.id, replacement, { duplicateSubtasks: true })
+
+    expect(replacement.subtasks).toHaveLength(2)
+    expect(replacement.subtasks[0].id).not.toBe(first.id)
+    expect(replacement.subtasks[1].dependencies).toEqual([replacement.subtasks[0].id])
+  })
+
+  it('preserves a replacement chain and redirects dependents to its active tail', async () => {
+    const { store } = newStore()
+    const project = await store.createProject('Replacement chain', 'Projects')
+    const first = await addNamed(store, project, 'Version 1')
+    const dependent = makeTask({ title: 'Delivery', dependencies: [first.id] })
+    await store.insertTask(project, dependent)
+    const second = makeTask({ title: 'Version 2', start: '', due: '' })
+    await store.replaceTask(project, first.id, second, { duplicateSubtasks: false })
+    const third = makeTask({ title: 'Version 3', start: '', due: '' })
+
+    await store.replaceTask(project, second.id, third, { duplicateSubtasks: false })
+
+    expect(first).toMatchObject({ status: 'superseded', replacedBy: second.id })
+    expect(second).toMatchObject({ status: 'superseded', replaces: first.id, replacedBy: third.id })
+    expect(dependent.dependencies).toEqual([third.id])
+  })
+
   it('migrates an old-format (embedded tasks) project on load and save', async () => {
     const { store, vault } = newStore()
     // Manually write an old-format project file (tasks embedded in frontmatter).

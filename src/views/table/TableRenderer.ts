@@ -14,9 +14,11 @@ import {
   columnWidth,
   tidyFields,
   viewFieldLabel,
+  excludeSupersededTasks,
   flattenTasks,
   findTaskById,
   applyTaskFilterFlat,
+  includesSupersededFilter,
   isQueryActive,
   t
 } from '@dotpm/core'
@@ -257,7 +259,8 @@ function fillTableBody(ctx: TableContext): void {
   // rebuilding the table around it.
   ctx.state.wrapper?.setAttr('data-borders', ctx.lineBorders)
 
-  let flat = flattenTasks(ctx.scope.tasks(), ctx.collapsedIds)
+  const includeSuperseded = includesSupersededFilter(ctx.state.query.filter)
+  let flat = flattenTasks(excludeSupersededTasks(ctx.scope.tasks(), includeSuperseded), ctx.collapsedIds)
   const hasActiveFilter = isQueryActive(ctx.state.query)
   flat = applyTaskFilterFlat(flat, ctx.state.query, ctx.scope.filterContext(personKeyer(ctx.plugin.app)))
 

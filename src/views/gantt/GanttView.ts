@@ -8,7 +8,9 @@ import {
   type GanttGranularity,
   type TaskQuery,
   type FlatTask,
+  excludeSupersededTasks,
   flattenTasks,
+  includesSupersededFilter,
   applyTaskFilterPromote,
   Temporal,
   today,
@@ -348,7 +350,7 @@ export class GanttView implements SubView {
 
   private getVisibleTasks(): Task[] {
     return applyTaskFilterPromote(
-      this.scope.tasks(),
+      excludeSupersededTasks(this.scope.tasks(), includesSupersededFilter(this.query.filter)),
       this.query,
       this.scope.filterContext(personKeyer(this.plugin.app))
     )

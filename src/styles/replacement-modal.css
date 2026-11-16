@@ -1,0 +1,54 @@
+.pm-replace-modal {
+  width: min(560px, 90vw);
+}
+
+.pm-replace-intro {
+  color: var(--text-muted);
+}
+
+.pm-replace-field {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0;
+}
+
+.pm-replace-field > label,
+.pm-replace-preview h3 {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  font-weight: 600;
+}
+
+.pm-replace-field select,
+.pm-replace-field input {
+  width: 100%;
+}
+
+.pm-replace-checkbox {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.pm-replace-preview {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  margin: 16px 0;
+  padding: 12px;
+}
+
+.pm-replace-preview h3,
+.pm-replace-preview p {
+  margin: 0 0 8px;
+}
+
+.pm-replace-preview p:last-child {
+  margin-bottom: 0;
+}
+
+.pm-replace-error {
+  color: var(--text-error);
+  min-height: 1.5em;
+}

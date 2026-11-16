@@ -55,6 +55,8 @@ export interface TaskRef {
   due: string
   completed: string
   dependencies: string[]
+  replacedBy?: string
+  replaces?: string
   assignees: string[]
   archived: boolean
 }
@@ -335,7 +337,7 @@ export class VaultIndex {
     const seen = new Set<string>()
     const tasks: TaskRef[] = []
     for (const task of this.taskRefs(ref.path)) {
-      if (task.archived || seen.has(task.id)) continue
+      if (task.archived || task.status === 'superseded' || seen.has(task.id)) continue
       seen.add(task.id)
       tasks.push(task)
     }
@@ -496,6 +498,8 @@ export class VaultIndex {
 
   private addTask(path: string, frontmatter: Record<string, unknown>): void {
     const projectId = str(frontmatter.projectId)
+    const replacedByRaw = str(frontmatter.replacedBy)
+    const replacesRaw = str(frontmatter.replaces)
     const ref: TaskRef = {
       id: str(frontmatter.id, path),
       path,
@@ -508,6 +512,8 @@ export class VaultIndex {
       due: str(frontmatter.due),
       completed: str(frontmatter.completed),
       dependencies: stringList(frontmatter.dependencies).map((raw) => refToId(this.app, raw, path)),
+      replacedBy: replacedByRaw ? refToId(this.app, replacedByRaw, path) : undefined,
+      replaces: replacesRaw ? refToId(this.app, replacesRaw, path) : undefined,
       assignees: stringList(frontmatter.assignees),
       archived: path.split('/').at(-2) === 'Archive'
     }
