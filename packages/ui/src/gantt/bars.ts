@@ -19,6 +19,18 @@ import { BAR_BORDER_RADIUS, BAR_PADDING, HEADER_HEIGHT, ROW_HEIGHT, dateToX } fr
 export interface GanttRow {
   task: Task
   depth: number
+  /** Visual row index in the grid, used when non-task rows (such as project headers) sit between tasks. */
+  row?: number
+}
+
+export interface ProjectSummaryBarInput {
+  title: string
+  color: string
+  start: string
+  due: string
+  progress: number
+  done: number
+  total: number
 }
 
 /** A status color, or the accent the theme resolves for the canvas. */
@@ -173,6 +185,91 @@ export function drawTaskBar(
   return { barGroup, rect, x, y, width, height }
 }
 
+/**
+ * Project summary bar spanning from earliest start to latest due, with downward end caps
+ * and progress fill. Returns null when the project has no dated tasks.
+ */
+export function drawSummaryBar(
+  g: SVGGElement,
+  canvas: GanttCanvas,
+  summary: ProjectSummaryBarInput,
+  row: number
+): SVGGElement | null {
+  const startDate = parsePlainDate(summary.start)
+  const endDate = parsePlainDate(summary.due)
+  const effectiveStart = startDate ?? endDate
+  if (!effectiveStart) return null
+  const effectiveEnd = (endDate ?? effectiveStart).add({ days: 1 })
+
+  const rowTop = HEADER_HEIGHT + row * ROW_HEIGHT
+  const barTop = rowTop + BAR_PADDING + 4
+  const barHeight = Math.max(6, ROW_HEIGHT - BAR_PADDING * 2 - 10)
+  const x = Math.max(0, dateToX(canvas.cfg, effectiveStart))
+  const xEnd = Math.min(canvas.cfg.totalWidth, dateToX(canvas.cfg, effectiveEnd))
+  const width = Math.max(10, xEnd - x)
+  const cap = 5
+  const color =
+    summary.color || getComputedStyle(canvas.svgEl).getPropertyValue('--interactive-accent').trim()
+
+  const group = svgEl('g', { class: 'pm-gantt-summary-group' })
+  g.appendChild(group)
+
+  const track = svgEl('rect', {
+    x,
+    y: barTop,
+    width,
+    height: barHeight,
+    rx: 2,
+    ry: 2,
+    fill: color,
+    opacity: 0.25,
+    class: 'pm-gantt-summary-bar'
+  })
+  group.appendChild(track)
+
+  if (summary.progress > 0) {
+    group.appendChild(
+      svgEl('rect', {
+        x,
+        y: barTop,
+        width: (Math.min(100, summary.progress) / 100) * width,
+        height: barHeight,
+        rx: 2,
+        ry: 2,
+        fill: color,
+        opacity: 0.85,
+        class: 'pm-gantt-summary-progress'
+      })
+    )
+  }
+
+  const capY = barTop + barHeight
+  group.appendChild(
+    svgEl('polygon', {
+      points: `${x},${barTop} ${x + cap * 2},${barTop} ${x},${capY + cap}`,
+      fill: color,
+      class: 'pm-gantt-summary-cap'
+    })
+  )
+  group.appendChild(
+    svgEl('polygon', {
+      points: `${x + width - cap * 2},${barTop} ${x + width},${barTop} ${x + width},${capY + cap}`,
+      fill: color,
+      class: 'pm-gantt-summary-cap'
+    })
+  )
+
+  const tooltip = svgEl('title', {})
+  tooltip.textContent = [
+    summary.title,
+    `${t('gantt.tooltipStart', { date: summary.start || '—' })}  ${t('gantt.tooltipDue', { date: summary.due || '—' })}`,
+    `${t('overview.doneOfTotal', { done: summary.done, total: summary.total })} (${summary.progress}%)`
+  ].join('\n')
+  group.appendChild(tooltip)
+
+  return group
+}
+
 export function drawMilestoneDiamond(
   g: SVGGElement,
   canvas: GanttCanvas,
@@ -200,12 +297,17 @@ export function drawMilestoneDiamond(
 }
 
 /** A dashed line down the body and a label in the sticky header for every dated milestone. */
-export function drawMilestoneLabels(canvas: GanttCanvas, statuses: StatusConfig[], rows: GanttRow[]): void {
+export function drawMilestoneLabels(
+  canvas: GanttCanvas,
+  statuses: StatusConfig[],
+  rows: GanttRow[],
+  totalRows = rows.length
+): void {
   const milestones = rows.filter(({ task }) => task.type === 'milestone' && (task.due || task.start))
   if (!milestones.length) return
 
   const linesG = svgEl('g', { class: 'pm-gantt-milestone-labels' })
-  const totalH = HEADER_HEIGHT + rows.length * ROW_HEIGHT
+  const totalH = HEADER_HEIGHT + totalRows * ROW_HEIGHT
 
   for (const { task } of milestones) {
     const date = parsePlainDate(task.due) ?? parsePlainDate(task.start)
@@ -236,27 +338,28 @@ export function drawMilestoneLabels(canvas: GanttCanvas, statuses: StatusConfig[
 }
 
 export function drawDependencyArrows(canvas: GanttCanvas, rows: GanttRow[]): void {
-  const indexMap = new Map<string, number>()
-  rows.forEach((row, i) => indexMap.set(row.task.id, i))
+  const byId = new Map<string, { row: number; task: Task }>()
+  rows.forEach((entry, i) => byId.set(entry.task.id, { row: entry.row ?? i, task: entry.task }))
 
   const arrowGroup = svgEl('g', { class: 'pm-gantt-arrows' })
 
-  for (const { task } of rows) {
+  for (const entry of rows) {
+    const { task } = entry
     if (!task.dependencies?.length) continue
-    const toRow = indexMap.get(task.id)
-    if (toRow === undefined) continue
-    const toY = HEADER_HEIGHT + toRow * ROW_HEIGHT + ROW_HEIGHT / 2
+    const to = byId.get(task.id)
+    if (!to) continue
+    const toY = HEADER_HEIGHT + to.row * ROW_HEIGHT + ROW_HEIGHT / 2
     const taskStart = parsePlainDate(task.start)
     if (!taskStart) continue
     const toX = dateToX(canvas.cfg, taskStart)
 
     for (const depId of task.dependencies) {
-      const fromRow = indexMap.get(depId)
-      if (fromRow === undefined) continue
-      const depDue = parsePlainDate(rows[fromRow].task.due)
+      const from = byId.get(depId)
+      if (!from) continue
+      const depDue = parsePlainDate(from.task.due)
       if (!depDue) continue
       const fromX = dateToX(canvas.cfg, depDue.add({ days: 1 }))
-      const fromY = HEADER_HEIGHT + fromRow * ROW_HEIGHT + ROW_HEIGHT / 2
+      const fromY = HEADER_HEIGHT + from.row * ROW_HEIGHT + ROW_HEIGHT / 2
       const midX = (fromX + toX) / 2
       arrowGroup.appendChild(
         svgEl('path', {

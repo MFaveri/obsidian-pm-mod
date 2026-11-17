@@ -1,5 +1,5 @@
 import { Notice } from 'obsidian'
-import { type PriorityConfig, type StatusConfig, t } from '@dotpm/core'
+import { type PriorityConfig, type StatusConfig, SUPERSEDED_STATUS, t } from '@dotpm/core'
 import { IconButton, renderIconControl } from '@dotpm/ui'
 
 /** On drop, moves the dragged item to this row's index. */
@@ -63,6 +63,7 @@ export function renderStatusDoneToggle(parent: HTMLElement, status: StatusConfig
   const wrapper = parent.createEl('label', { cls: 'pm-settings-complete-toggle' })
   const checkbox = wrapper.createEl('input', { type: 'checkbox' })
   checkbox.checked = status.complete
+  checkbox.disabled = status.id === SUPERSEDED_STATUS.id
   wrapper.createSpan({ text: t('palette.complete'), cls: 'pm-settings-complete-text' })
   checkbox.addEventListener('change', () => {
     status.complete = checkbox.checked
@@ -76,6 +77,8 @@ interface PaletteListEditorOpts<T extends PaletteEntry> {
   onChanged: () => void
   /** Called after an entry is removed, e.g. to remap orphaned tasks. */
   onDeleted?: (deleted: T) => void
+  /** Optional message preventing deletion of a built-in entry. */
+  canDelete?: (item: T) => string | null
   /** Notice shown when deleting would leave the list empty. */
   minOneMessage: string
   /** Extra per-row controls between the color picker and the delete button. */
@@ -101,6 +104,11 @@ function renderPaletteListEditor<T extends PaletteEntry>(container: HTMLElement,
       .setIcon('x')
       .setTooltip(t('common.remove'))
       .onClick(() => {
+        const blocked = opts.canDelete?.(item)
+        if (blocked) {
+          new Notice(blocked)
+          return
+        }
         if (opts.items.length <= 1) {
           new Notice(opts.minOneMessage)
           return
@@ -124,6 +132,7 @@ export function renderStatusListEditor(container: HTMLElement, opts: StatusListE
     items: opts.statuses,
     onChanged: opts.onChanged,
     onDeleted: opts.onDeleted,
+    canDelete: (status) => (status.id === SUPERSEDED_STATUS.id ? t('settings.builtInSuperseded') : null),
     minOneMessage: t('settings.atLeastOneStatus'),
     renderExtra: (row, status) => renderStatusDoneToggle(row, status, opts.onChanged)
   })

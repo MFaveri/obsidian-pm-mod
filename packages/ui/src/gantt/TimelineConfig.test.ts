@@ -91,4 +91,14 @@ describe('non-working days', () => {
     expect(nonWorkingDay({}, ['2026-03-10'])).toBeUndefined()
     expect(nonWorkingDay({ holidays: true }, [])).toBeUndefined()
   })
+
+  it('respects custom workingWeekdays and keeps specific extraWorkdays visible', () => {
+    const fn = nonWorkingDay({ weekends: true, holidays: true }, ['2026-11-23'], {
+      workingWeekdays: [1, 2, 3, 4, 5],
+      extraWorkdays: ['2026-11-21']
+    })
+    expect(fn?.(date('2026-11-21'))).toBe(false) // Saturday explicitly worked
+    expect(fn?.(date('2026-11-22'))).toBe(true) // Sunday still hidden
+    expect(fn?.(date('2026-11-23'))).toBe(true) // Holiday still hidden
+  })
 })

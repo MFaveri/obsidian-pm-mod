@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { makeTask, type Task } from '../types'
 import {
   addTaskToTree,
+  cloneTaskForest,
+  cloneTaskSubtree,
   collectAllAssignees,
   collectAllTags,
   deleteTaskFromTree,
@@ -216,5 +218,34 @@ describe('totalLoggedHours', () => {
       ]
     })
     expect(totalLoggedHours(t)).toBe(5.5)
+  })
+})
+
+describe('cloneTaskSubtree and cloneTaskForest', () => {
+  it('clears replacement links when cloning a single task subtree', () => {
+    const source = task({
+      id: 'current',
+      replaces: 'old',
+      replacedBy: 'future',
+      subtasks: [task({ id: 'sub', replaces: 'old-sub' })]
+    })
+
+    const copy = cloneTaskSubtree(source, true)
+
+    expect(copy.replaces).toBeUndefined()
+    expect(copy.replacedBy).toBeUndefined()
+    expect(copy.subtasks[0].replaces).toBeUndefined()
+  })
+
+  it('remaps intra-forest replacement links and drops external ones', () => {
+    const old = task({ id: 'old', status: 'superseded', replacedBy: 'current' })
+    const current = task({ id: 'current', replaces: 'old' })
+    const orphan = task({ id: 'orphan', replaces: 'outside' })
+
+    const clones = cloneTaskForest([old, current, orphan])
+
+    expect(clones[0].replacedBy).toBe(clones[1].id)
+    expect(clones[1].replaces).toBe(clones[0].id)
+    expect(clones[2].replaces).toBeUndefined()
   })
 })

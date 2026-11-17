@@ -32,8 +32,12 @@ export class ReplacementRequiredError extends Error {
   }
 }
 
+const ACTIVE_STATUS_IDS = new Set(['in-progress', 'doing', 'review'])
+
 function isPlanningStatus(status: string, statuses: StatusConfig[]): boolean {
-  return status === 'todo' || status === 'blocked' || status === statuses[0]?.id
+  if (status === 'todo' || status === 'blocked' || status === 'cancelled') return true
+  const first = statuses[0]
+  return !!first && status === first.id && !first.complete && !ACTIVE_STATUS_IDS.has(first.id)
 }
 
 export function canTransitionTaskStatus(
@@ -59,6 +63,19 @@ export function assertCanTransitionTaskStatus(
   if (targetStatus === 'superseded' && targetStatus !== task.status) throw new ReplacementRequiredError()
   if (canTransitionTaskStatus(task, targetStatus, nodes, statuses, dependencyTask)) return
   throw new DependencyBlockedError(getUnresolvedDependencies(dependencyTask, nodes))
+}
+
+export function assertCanMaintainDependencies(
+  task: DependencyNode,
+  addedDependencyIds: string[],
+  nodes: Map<string, DependencyNode>,
+  statuses: StatusConfig[]
+): void {
+  if (addedDependencyIds.length === 0 || task.status === 'superseded') return
+  if (isPlanningStatus(task.status, statuses)) return
+  const unresolved = getUnresolvedDependencies({ ...task, dependencies: addedDependencyIds }, nodes)
+  if (unresolved.length === 0) return
+  throw new DependencyBlockedError(unresolved)
 }
 
 export function assertCanInsertTask(
@@ -109,6 +126,10 @@ export function wouldCreateReplacementCycle(
   return false
 }
 
+function hasDescendant(root: Task, targetId: string): boolean {
+  return root.subtasks.some((sub) => sub.id === targetId || hasDescendant(sub, targetId))
+}
+
 export function getReplacementCandidates(source: Task, allTasks: Task[], statuses: StatusConfig[] = []): Task[] {
   const descendantIds = new Set<string>()
   const collectDescendants = (tasks: Task[]): void => {
@@ -127,6 +148,7 @@ export function getReplacementCandidates(source: Task, allTasks: Task[], statuse
     (task) =>
       task.id !== source.id &&
       !descendantIds.has(task.id) &&
+      !hasDescendant(task, source.id) &&
       !prerequisites.has(task.id) &&
       !terminal(task) &&
       !task.replacedBy &&
@@ -135,7 +157,7 @@ export function getReplacementCandidates(source: Task, allTasks: Task[], statuse
   )
 }
 
-export function getDependencyCandidates(tasks: Task[], targetId: string): Task[] {
+export function getDependencyCandidates(tasks: Task[], targetId: string, statuses: StatusConfig[] = []): Task[] {
   const candidates: Task[] = []
   const taskById = new Map<string, Task>()
   const index = (items: Task[]): void => {
@@ -148,26 +170,26 @@ export function getDependencyCandidates(tasks: Task[], targetId: string): Task[]
 
   const existingDependencyTails = new Set<string>()
   const target = taskById.get(targetId)
-  if (target) {
+  if (target && target.dependencies.length > 0) {
+    const nodes = new Map(
+      [...taskById.values()].map((task) => [
+        task.id,
+        {
+          id: task.id,
+          title: task.title,
+          status: task.status,
+          dependencies: task.dependencies,
+          terminal: statuses.length
+            ? isTerminalStatus(task.status, statuses)
+            : task.status === 'done' || task.status === 'cancelled' || task.status === 'superseded',
+          archived: task.archived,
+          replacedBy: task.replacedBy,
+          replaces: task.replaces
+        }
+      ])
+    )
     for (const dependencyId of new Set(target.dependencies)) {
-      const dependency = taskById.get(dependencyId)
-      if (!dependency) continue
-      const nodes = new Map(
-        [...taskById.values()].map((task) => [
-          task.id,
-          {
-            id: task.id,
-            title: task.title,
-            status: task.status,
-            dependencies: task.dependencies,
-            terminal: task.status === 'done' || task.status === 'cancelled' || task.status === 'superseded',
-            archived: task.archived,
-            replacedBy: task.replacedBy,
-            replaces: task.replaces
-          }
-        ])
-      )
-      const dependencyNode = nodes.get(dependency.id)
+      const dependencyNode = nodes.get(dependencyId)
       if (!dependencyNode) continue
       const resolved = resolveDependencyTail(dependencyNode, nodes)
       if (!resolved.missing && resolved.task) existingDependencyTails.add(resolved.task.id)

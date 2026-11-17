@@ -79,6 +79,7 @@ export interface ArchiveCandidate {
 
 function archivable(task: Task, isComplete: (status: string) => boolean, cutoff: string): boolean {
   if (task.archived) return true
+  if (task.status === 'superseded') return !!task.completed && task.completed <= cutoff
   if (!isComplete(task.status)) return false
   if (!task.completed || task.completed > cutoff) return false
   return task.subtasks.every((sub) => archivable(sub, isComplete, cutoff))

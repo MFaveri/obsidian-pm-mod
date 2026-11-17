@@ -560,6 +560,66 @@ describe('ProjectStore round-trip', () => {
     expect(dependent.dependencies).toEqual([third.id])
   })
 
+  it('blocks adding an unresolved dependency to an already active task and allows cancelling it', async () => {
+    const { store } = newStore()
+    const project = await store.createProject('Active dependency check', 'Projects')
+    const blocker = await addNamed(store, project, 'Pending prereq')
+    const active = makeTask({ title: 'Active task', status: 'in-progress' })
+    await store.insertTask(project, active)
+
+    await expect(store.updateTask(project, active.id, { dependencies: [blocker.id] })).rejects.toThrow('Pending prereq')
+    expect(active.dependencies).toEqual([])
+
+    const blocked = makeTask({ title: 'Blocked task', dependencies: [blocker.id] })
+    await store.insertTask(project, blocked)
+    await store.updateTask(project, blocked.id, { status: 'cancelled' })
+    expect(blocked.status).toBe('cancelled')
+  })
+
+  it('skips superseded subtasks when duplicating subtasks during replacement', async () => {
+    const { store } = newStore()
+    const project = await store.createProject('Skip historical subtasks', 'Projects')
+    const deadSub = makeTask({ id: 'dead-sub', title: 'Old step', status: 'superseded', replacedBy: 'live-sub' })
+    const liveSub = makeTask({ id: 'live-sub', title: 'New step', type: 'subtask', replaces: 'dead-sub' })
+    const source = makeTask({ title: 'Original', subtasks: [deadSub, liveSub] })
+    await store.insertTask(project, source)
+    const replacement = makeTask({ title: 'Replacement', start: '', due: '' })
+
+    await store.replaceTask(project, source.id, replacement, { duplicateSubtasks: true })
+
+    expect(replacement.subtasks).toHaveLength(1)
+    expect(replacement.subtasks[0].title).toBe('New step (copy)')
+    expect(replacement.subtasks[0].replaces).toBeUndefined()
+  })
+
+  it('rejects an active existing replacement when it would inherit unresolved dependencies', async () => {
+    const { store } = newStore()
+    const project = await store.createProject('Existing active replacement', 'Projects')
+    const prereq = await addNamed(store, project, 'Unfinished prereq')
+    const source = makeTask({ title: 'Original', dependencies: [prereq.id] })
+    const existing = makeTask({ title: 'Already started', status: 'in-progress' })
+    await store.insertTask(project, source)
+    await store.insertTask(project, existing)
+
+    await expect(
+      store.replaceTask(project, source.id, existing, { duplicateSubtasks: false })
+    ).rejects.toThrow('Unfinished prereq')
+    expect(source.status).toBe('todo')
+    expect(existing.replaces).toBeUndefined()
+  })
+
+  it('clears dangling replacement links when one side of the pair is deleted', async () => {
+    const { store } = newStore()
+    const project = await store.createProject('Delete replacement cleanup', 'Projects')
+    const source = await addNamed(store, project, 'Original')
+    const replacement = makeTask({ title: 'Replacement', start: '', due: '' })
+    await store.replaceTask(project, source.id, replacement, { duplicateSubtasks: false })
+
+    await store.deleteTask(project, replacement.id)
+
+    expect(source.replacedBy).toBeUndefined()
+  })
+
   it('migrates an old-format (embedded tasks) project on load and save', async () => {
     const { store, vault } = newStore()
     // Manually write an old-format project file (tasks embedded in frontmatter).
@@ -735,6 +795,61 @@ describe('ProjectStore pull-forward on early finish', () => {
     const blocker = expectDefined(flattenTasks(project.tasks).find((f) => f.task.title === 'Blocker')).task
     await store.updateTask(project, blocker.id, { status: 'todo' })
     expect(blocked.start).toBe(addDays(BLOCKER_DUE, 1))
+  })
+
+  it('schedules dependents on working days and skips vault holidays when scheduleWorkdaysOnly is enabled', async () => {
+    const settings: PMSettings = {
+      ...SETTINGS,
+      autoSchedule: true,
+      scheduleWorkdaysOnly: true,
+      holidays: ['2026-04-06']
+    }
+    const { app } = makeFakeApp({ liveMetadataCache: true })
+    const store = new ProjectStore(app as unknown as App, () => settings)
+    const project = await store.createProject('Workdays', 'Projects')
+    const blocker = makeTask({ title: 'Blocker', start: '2026-04-01', due: '2026-04-03' }) // Friday
+    const dependent = makeTask({
+      title: 'Dependent',
+      start: '2026-03-30',
+      due: '2026-04-01', // 3 working days
+      dependencies: [blocker.id]
+    })
+    await store.insertTask(project, blocker)
+    await store.insertTask(project, dependent)
+
+    await store.scheduleAfterChange(project, blocker.id)
+
+    // Skips Sat 04-04, Sun 04-05, Mon holiday 04-06 -> Tue 04-07 .. Thu 04-09
+    expect(dependent.start).toBe('2026-04-07')
+    expect(dependent.due).toBe('2026-04-09')
+  })
+
+  it('persists per-project workingWeekdays and extraWorkdays across reload and uses them when scheduling', async () => {
+    const settings: PMSettings = { ...SETTINGS, autoSchedule: true, scheduleWorkdaysOnly: true }
+    const { app, vault } = makeFakeApp({ liveMetadataCache: true })
+    const store = new ProjectStore(app as unknown as App, () => settings)
+    const project = await store.createProject('Special Saturday', 'Projects')
+    project.config = {
+      workingWeekdays: [1, 2, 3, 4, 5],
+      extraWorkdays: ['2026-11-21']
+    }
+    const blocker = makeTask({ title: 'Friday work', start: '2026-11-19', due: '2026-11-20' })
+    const dependent = makeTask({
+      title: 'Saturday special',
+      start: '2026-11-18',
+      due: '2026-11-18',
+      dependencies: [blocker.id]
+    })
+    await store.insertTask(project, blocker)
+    await store.insertTask(project, dependent)
+    await store.scheduleAfterChange(project, blocker.id)
+    expect(dependent.start).toBe('2026-11-21')
+
+    const file = vault.getAbstractFileByPath(project.filePath)
+    if (!(file instanceof TFile)) throw new Error('project file missing')
+    const reloaded = expectDefined(await new ProjectStore(app as unknown as App, () => settings).loadProject(file))
+    expect(reloaded.config?.workingWeekdays).toEqual([1, 2, 3, 4, 5])
+    expect(reloaded.config?.extraWorkdays).toEqual(['2026-11-21'])
   })
 })
 

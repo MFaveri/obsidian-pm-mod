@@ -99,7 +99,7 @@ import { GanttView } from './gantt/GanttView'
 import { KanbanView } from './KanbanView'
 import { openTaskModal } from '#ui/ModalFactory'
 import { exportViewAsHtml } from '../export/exportView'
-import { collapsedTaskIds, setAllCollapsed } from './collapse'
+import { collapsedGanttProjectPaths, collapsedTaskIds, setAllCollapsed } from './collapse'
 
 export const PM_PROJECT_VIEW_TYPE = 'pm-project'
 
@@ -1197,7 +1197,11 @@ export class ProjectView extends ItemView {
       )
     }
     if (this.currentView !== 'kanban') {
-      const anyCollapsed = collapsedTaskIds(this.plugin.settings, scope.projects).size > 0
+      const anyCollapsed =
+        collapsedTaskIds(this.plugin.settings, scope.projects).size > 0 ||
+        (this.currentView === 'gantt' &&
+          scope.isMulti &&
+          collapsedGanttProjectPaths(this.plugin.settings, scope.projects).size > 0)
       options.push({
         id: 'collapse',
         icon: anyCollapsed ? 'chevrons-up-down' : 'chevrons-down-up',
@@ -1256,7 +1260,7 @@ export class ProjectView extends ItemView {
   }
 
   private toggleCollapseAll(scope: ProjectScope, anyCollapsed: boolean): void {
-    setAllCollapsed(this.plugin.settings, scope.projects, !anyCollapsed)
+    setAllCollapsed(this.plugin.settings, scope.projects, !anyCollapsed, this.currentView === 'gantt' && scope.isMulti)
     void this.plugin.saveSettings()
     this.renderHeader()
     this.refreshSubview()

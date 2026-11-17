@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS, makeProject, makeTask, type PMSettings, type Project } from '@dotpm/core'
-import { collapsedTaskIds, setAllCollapsed, toggleCollapsed } from './collapse'
+import {
+  collapsedGanttProjectPaths,
+  collapsedTaskIds,
+  setAllCollapsed,
+  toggleCollapsed,
+  toggleGanttProjectCollapsed
+} from './collapse'
 
 function settings(): PMSettings {
   return structuredClone(DEFAULT_SETTINGS)
@@ -78,5 +84,21 @@ describe('setAllCollapsed', () => {
     setAllCollapsed(cfg, [project('Projects/A.md')], false)
 
     expect(cfg.collapsedTasks['Projects/A.md']).toEqual([])
+  })
+
+  it('collapses and expands Gantt projects when includeProjects is true without touching dashboard state', () => {
+    const cfg = settings()
+    const a = project('Projects/A.md')
+    const b = project('Projects/B.md')
+
+    toggleGanttProjectCollapsed(cfg, a.filePath)
+    expect([...collapsedGanttProjectPaths(cfg, [a, b])]).toEqual(['Projects/A.md'])
+    expect(cfg.collapsedProjects).toEqual([])
+
+    setAllCollapsed(cfg, [a, b], true, true)
+    expect([...collapsedGanttProjectPaths(cfg, [a, b])]).toEqual(['Projects/A.md', 'Projects/B.md'])
+
+    setAllCollapsed(cfg, [a, b], false, true)
+    expect([...collapsedGanttProjectPaths(cfg, [a, b])]).toEqual([])
   })
 })

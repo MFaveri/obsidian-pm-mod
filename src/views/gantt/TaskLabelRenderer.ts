@@ -1,10 +1,10 @@
 import { Menu } from 'obsidian'
-import { Chip, CollapseToggle, IconButton, renderProjectChip, renderStatusDot, safeAsync, ROW_HEIGHT } from '@dotpm/ui'
+import { Chip, CollapseToggle, IconButton, renderStatusDot, safeAsync, ROW_HEIGHT } from '@dotpm/ui'
 import type PMPlugin from '#main'
-import { type StatusConfig, type Task, t, tn } from '@dotpm/core'
+import { type Project, type ProjectSpanSummary, type StatusConfig, type Task, t, tn } from '@dotpm/core'
 import type { ProjectScope, TaskRef } from '#store'
 import { openTaskByPath, openTaskModal } from '#ui/ModalFactory'
-import { toggleCollapsed } from '../collapse'
+import { toggleCollapsed, toggleGanttProjectCollapsed } from '../collapse'
 
 export interface LabelContext {
   plugin: PMPlugin
@@ -12,6 +12,46 @@ export interface LabelContext {
   statuses: StatusConfig[]
   collapsedIds: ReadonlySet<string>
   onRefresh: () => Promise<void>
+}
+
+export function renderProjectLabel(
+  container: HTMLElement,
+  project: Project,
+  summary: ProjectSpanSummary,
+  collapsed: boolean,
+  ctx: LabelContext
+): void {
+  const el = container.createDiv('pm-gantt-label-row pm-gantt-project-row')
+  el.style.height = `${ROW_HEIGHT}px`
+
+  new CollapseToggle(el, {
+    collapsed,
+    onToggle: safeAsync(async () => {
+      toggleGanttProjectCollapsed(ctx.plugin.settings, project.filePath)
+      await ctx.plugin.saveSettings()
+      await ctx.onRefresh()
+    })
+  })
+
+  const dot = el.createSpan({ cls: 'pm-gantt-project-dot' })
+  dot.style.backgroundColor = project.color
+
+  const titleEl = el.createSpan({ text: project.title, cls: 'pm-gantt-project-title' })
+  titleEl.addEventListener(
+    'click',
+    safeAsync(() => ctx.plugin.router.openProjectOverview(project.filePath))
+  )
+
+  el.createSpan({ text: `${summary.done}/${summary.total}`, cls: 'pm-gantt-project-count' })
+
+  new IconButton(el)
+    .setIcon('plus')
+    .setTooltip(t('task.add'))
+    .setRevealOnHover(true)
+    .onClick((e) => {
+      e.stopPropagation()
+      openTaskModal(ctx.plugin, project, { onSave: () => ctx.onRefresh() })
+    })
 }
 
 export function renderTaskLabel(
@@ -55,7 +95,7 @@ export function renderTaskLabel(
       e.preventDefault()
       el.removeClass('pm-gantt-label-row--drop-before', 'pm-gantt-label-row--drop-after')
       const draggedId = e.dataTransfer?.getData('text/plain')
-      if (!draggedId || draggedId === task.id) return
+      if (!draggedId || draggedId === task.id || !project.taskIndex.has(draggedId)) return
       await ctx.plugin.store.reorderTask(project, draggedId, task.id, dropPosition)
       await ctx.onRefresh()
     })
@@ -74,21 +114,13 @@ export function renderTaskLabel(
     el.createSpan({ cls: 'pm-gantt-label-spacer' })
   }
 
-  renderStatusDot(el, task.status, ctx.statuses, 'pm-gantt-label-dot')
+  const taskStatuses = ctx.scope.configOf(task.id).statuses
+  renderStatusDot(el, task.status, taskStatuses, 'pm-gantt-label-dot')
 
   const titleEl = el.createSpan({ text: task.title, cls: 'pm-gantt-label-title' })
   titleEl.addEventListener('click', () => {
     openTaskModal(ctx.plugin, project, { task, onSave: () => ctx.onRefresh() })
   })
-
-  // With one project the rows are all its own; with several, each says where it belongs.
-  if (ctx.scope.isMulti) {
-    renderProjectChip(el, {
-      title: project.title,
-      color: project.color,
-      onClick: safeAsync(() => ctx.plugin.router.openProjectLink(project.filePath))
-    })
-  }
 
   // A predecessor outside this view draws no arrow, so the row says it is there.
   const elsewhere = task.dependencies

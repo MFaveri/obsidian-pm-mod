@@ -1,5 +1,13 @@
 import type { Project, Task } from '@dotpm/core'
-import { displayName, findParentId, findTaskById, flattenTasks, makeTask } from '@dotpm/core'
+import {
+  DependencyBlockedError,
+  ReplacementRequiredError,
+  displayName,
+  findParentId,
+  findTaskById,
+  flattenTasks,
+  makeTask
+} from '@dotpm/core'
 import {
   ApiRequestError,
   parseProjectCreate,
@@ -168,7 +176,14 @@ export class LocalApi implements DomainApi {
     const create = parseTaskCreate(input, this.plugin.store.configFor(project))
     if (create.parentId && !findTaskById(project, create.parentId)) notFound('parent task', create.parentId)
     const task = makeTask(taskPatch(create))
-    await this.plugin.store.insertTask(project, task, create.parentId ?? null)
+    try {
+      await this.plugin.store.insertTask(project, task, create.parentId ?? null)
+    } catch (err) {
+      if (err instanceof DependencyBlockedError || err instanceof ReplacementRequiredError) {
+        throw new ApiRequestError('invalid', err.message)
+      }
+      throw err
+    }
     this.known.set(task.id, project.filePath)
     await this.plugin.store.scheduleAfterChange(project, task.id)
     this.plugin.refreshViews()
@@ -186,6 +201,9 @@ export class LocalApi implements DomainApi {
     } catch (err) {
       if (err instanceof TaskFileNameConflictError) {
         throw new ApiRequestError('conflict', `a note named "${err.fileName}" already exists in this project`)
+      }
+      if (err instanceof DependencyBlockedError || err instanceof ReplacementRequiredError) {
+        throw new ApiRequestError('invalid', err.message)
       }
       throw err
     }

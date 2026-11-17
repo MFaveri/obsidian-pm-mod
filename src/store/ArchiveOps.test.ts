@@ -81,6 +81,19 @@ describe('collectArchivable', () => {
 
     expect(collectArchivable(p, isComplete, '2026-08-10')).toEqual([])
   })
+
+  it('collects a superseded task past the cutoff even when its historical subtasks stayed open', () => {
+    const p = project([
+      makeTask({
+        id: 'old',
+        status: 'superseded',
+        completed: '2026-08-01',
+        subtasks: [makeTask({ id: 'old-sub', status: 'todo' })]
+      })
+    ])
+
+    expect(collectArchivable(p, isComplete, '2026-08-10')).toEqual([{ rootId: 'old', ids: ['old', 'old-sub'] }])
+  })
 })
 
 describe('withoutBlockedDependents', () => {

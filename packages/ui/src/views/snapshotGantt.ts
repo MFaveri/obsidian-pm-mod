@@ -1,17 +1,15 @@
 import {
   type GanttGranularity,
+  type GanttRowItem,
+  type ProjectSpanSummary,
   type Task,
-  applyTaskFilterPromote,
-  excludeSupersededTasks,
-  flattenTasks,
-  includesSupersededFilter,
+  buildGanttRows,
   shownFields,
   today,
   t
 } from '@dotpm/core'
 import { svgEl } from '#dom'
 import { SegmentedControl } from '#primitives/SegmentedControl'
-import { renderProjectChip } from '../composites/projectChip'
 import { renderStatusDot } from '../StatusBadge'
 import {
   barAsideText,
@@ -20,6 +18,7 @@ import {
   drawMilestoneDiamond,
   drawMilestoneLabels,
   drawRowHover,
+  drawSummaryBar,
   drawTaskBar
 } from '../gantt/bars'
 import type { GanttCanvas } from '../gantt/canvas'
@@ -34,15 +33,15 @@ import {
   nonWorkingDay
 } from '../gantt/TimelineConfig'
 import {
-  allTasks,
+  configOf,
   customFieldColumns,
   fieldCatalogOf,
   filterContextOf,
   isMulti,
   mergedConfig,
-  projectOf,
   queryOf,
-  type ViewModel
+  type ViewModel,
+  type ViewProject
 } from './model'
 
 const granularities = (): { id: GanttGranularity; label: string }[] => [
@@ -53,15 +52,13 @@ const granularities = (): { id: GanttGranularity; label: string }[] => [
   { id: 'year', label: t('granularity.year') }
 ]
 
-const noop = (): void => {}
-
-function visibleTasks(model: ViewModel): Task[] {
-  const query = queryOf(model)
-  return applyTaskFilterPromote(
-    excludeSupersededTasks(allTasks(model), includesSupersededFilter(query.filter)),
-    query,
-    filterContextOf(model)
-  )
+function renderProjectRowLabel(container: HTMLElement, project: ViewProject, summary: ProjectSpanSummary): void {
+  const el = container.createDiv('pm-gantt-label-row pm-gantt-project-row')
+  el.setCssStyles({ height: `${ROW_HEIGHT}px` })
+  const dot = el.createSpan({ cls: 'pm-gantt-project-dot' })
+  dot.setCssStyles({ backgroundColor: project.color })
+  el.createSpan({ text: project.title, cls: 'pm-gantt-project-title' })
+  el.createSpan({ text: `${summary.done}/${summary.total}`, cls: 'pm-gantt-project-count' })
 }
 
 function renderLabel(container: HTMLElement, model: ViewModel, task: Task, depth: number): void {
@@ -69,19 +66,27 @@ function renderLabel(container: HTMLElement, model: ViewModel, task: Task, depth
   el.setCssStyles({ height: `${ROW_HEIGHT}px`, paddingLeft: `${depth * 18 + 8}px` })
   el.dataset.taskId = task.id
   el.createSpan({ cls: 'pm-gantt-label-spacer' })
-  renderStatusDot(el, task.status, mergedConfig(model).statuses, 'pm-gantt-label-dot')
+  renderStatusDot(el, task.status, configOf(model, task.id).statuses, 'pm-gantt-label-dot')
   el.createSpan({ text: task.title, cls: 'pm-gantt-label-title' })
-  if (isMulti(model)) {
-    const owner = projectOf(model, task.id)
-    if (owner) renderProjectChip(el, { title: owner.title, color: owner.color, onClick: noop })
-  }
   if (task.progress > 0) el.createSpan({ text: `${task.progress}%`, cls: 'pm-gantt-label-progress' })
 }
 
 function renderBody(container: HTMLElement, model: ViewModel, granularity: GanttGranularity): void {
-  const tasks = visibleTasks(model)
-  const rows = flattenTasks(tasks).map((f) => ({ task: f.task, depth: f.depth }))
-  const cfg = buildTimelineConfig(tasks, granularity, {
+  const filterCtx = filterContextOf(model)
+  const projects = model.projects.map((p) => ({ ...p, filePath: p.id }))
+  const { rows: items, timelineTasks } = buildGanttRows({
+    projects,
+    isMulti: isMulti(model),
+    query: queryOf(model),
+    statusesOf: (p) => p.config.statuses,
+    filterContextOf: () => filterCtx,
+    collapsedTaskIds: new Set(),
+    collapsedProjectPaths: new Set()
+  })
+  const taskRows = items
+    .filter((item): item is Extract<GanttRowItem<(typeof projects)[number]>, { kind: 'task' }> => item.kind === 'task')
+    .map((item) => ({ task: item.task, depth: item.depth, row: item.rowIndex }))
+  const cfg = buildTimelineConfig(timelineTasks, granularity, {
     isHidden: nonWorkingDay(model.nonWorkingDays, model.settings.holidays)
   })
   const config = mergedConfig(model)
@@ -105,27 +110,40 @@ function renderBody(container: HTMLElement, model: ViewModel, granularity: Gantt
 
   const svgContainer = rightPanel.createDiv('pm-gantt-svg-container')
   svgContainer.setCssStyles({ width: `${cfg.totalWidth}px`, marginTop: `-${HEADER_HEIGHT}px` })
-  const svgHeight = HEADER_HEIGHT + (rows.length + 1) * ROW_HEIGHT
+  const svgHeight = HEADER_HEIGHT + (items.length + 1) * ROW_HEIGHT
   const canvasSvg = svgEl('svg', { width: cfg.totalWidth, height: svgHeight, class: 'pm-gantt-svg' })
   svgContainer.appendChild(canvasSvg)
 
   const canvas: GanttCanvas = { svgEl: canvasSvg, headerSvgEl, cfg, weekLabel: model.settings.ganttWeekLabel }
   renderTimelineHeader(canvas)
-  renderGridLines(canvas, rows.length)
+  renderGridLines(canvas, items.length)
   renderTodayLine(canvas, svgHeight)
 
   const barsGroup = svgEl('g', { class: 'pm-gantt-bars' })
   canvasSvg.appendChild(barsGroup)
-  rows.forEach(({ task, depth }, row) => {
+  for (const item of items) {
+    if (item.kind === 'project') {
+      renderProjectRowLabel(leftBody, item.project, item.summary)
+      drawRowHover(barsGroup, canvas, item.rowIndex)
+      drawSummaryBar(
+        barsGroup,
+        canvas,
+        { title: item.project.title, color: item.project.color, ...item.summary },
+        item.rowIndex
+      )
+      continue
+    }
+    const { task, depth, rowIndex } = item
     renderLabel(leftBody, model, task, depth)
-    if (!task.start && !task.due) return
-    const color = barColor(canvas, statuses, task)
-    drawRowHover(barsGroup, canvas, row)
-    if (task.type === 'milestone') drawMilestoneDiamond(barsGroup, canvas, task, row, color)
-    else drawTaskBar(barsGroup, canvas, statuses, task, row, color, barAsideText(task, labelFields, labelSource))
-  })
-  drawDependencyArrows(canvas, rows)
-  drawMilestoneLabels(canvas, statuses, rows)
+    if (!task.start && !task.due) continue
+    const taskStatuses = configOf(model, task.id).statuses
+    const color = barColor(canvas, taskStatuses, task)
+    drawRowHover(barsGroup, canvas, rowIndex)
+    if (task.type === 'milestone') drawMilestoneDiamond(barsGroup, canvas, task, rowIndex, color)
+    else drawTaskBar(barsGroup, canvas, taskStatuses, task, rowIndex, color, barAsideText(task, labelFields, labelSource))
+  }
+  drawDependencyArrows(canvas, taskRows)
+  drawMilestoneLabels(canvas, statuses, taskRows, items.length)
 
   leftPanel.addEventListener(
     'wheel',

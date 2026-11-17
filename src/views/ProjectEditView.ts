@@ -1,4 +1,4 @@
-import { ButtonComponent, Menu, ItemView, WorkspaceLeaf } from 'obsidian'
+import { ButtonComponent, Menu, Notice, ItemView, WorkspaceLeaf } from 'obsidian'
 import type PMPlugin from '#main'
 import { addTabPageItems, refreshTabTitle } from '#ui/tab'
 import {
@@ -10,7 +10,12 @@ import {
   type ProjectPatch,
   type StatusConfig,
   DEFAULT_PALETTE_COLOR,
+  DEFAULT_WORKING_WEEKDAYS,
+  Temporal,
+  formatDate,
+  locale,
   makeId,
+  parsePlainDate,
   priorityIconSetLabels,
   collectAllAssignees,
   flattenTasks,
@@ -406,6 +411,12 @@ export class ProjectEditView extends ItemView {
       { value: true, label: t('common.on') },
       { value: false, label: t('common.off') }
     ])
+    row(t('projectEdit.workdaysOnly'), 'scheduleWorkdaysOnly', [
+      { value: true, label: t('common.on') },
+      { value: false, label: t('common.off') }
+    ])
+    this.renderWorkingWeekdaysRow(props, project)
+    this.renderExtraWorkdaysRow(props, project)
     row(t('settings.autoArchiveDays.name'), 'autoArchiveDays', [
       { value: 0, label: t('projectEdit.never') },
       ...[7, 14, 30, 90].map((days) => ({ value: days, label: tn('projectEdit.afterDays', days) }))
@@ -420,6 +431,90 @@ export class ProjectEditView extends ItemView {
       { value: 'vertical', label: t('settings.lineBorders.vertical') },
       { value: 'both', label: t('settings.lineBorders.both') }
     ])
+  }
+
+  private renderWorkingWeekdaysRow(props: HTMLElement, project: Project): void {
+    renderPropRow(props, t('projectEdit.workingWeekdays'), () => {
+      const cell = createDiv('pm-prop-value pm-weekdays-cell')
+      const custom = project.config?.workingWeekdays !== undefined
+      const toggle = cell.createEl('label', { cls: 'pm-status-toggle' })
+      const cb = toggle.createEl('input', { type: 'checkbox' })
+      cb.checked = custom
+      toggle.createSpan({ text: t('projectEdit.customWeekdays') })
+
+      const base = this.plugin.settings.workingWeekdays?.length
+        ? this.plugin.settings.workingWeekdays
+        : DEFAULT_WORKING_WEEKDAYS
+      const active = new Set(project.config?.workingWeekdays ?? base)
+      const group = cell.createDiv('pm-weekday-group')
+      const monday = Temporal.PlainDate.from('2026-01-05')
+      for (let day = 1; day <= 7; day++) {
+        const label = monday.add({ days: day - 1 }).toLocaleString(locale(), { weekday: 'short' })
+        const btn = group.createEl('button', {
+          type: 'button',
+          text: label,
+          cls: `pm-weekday-btn${active.has(day) ? ' pm-weekday-btn--active' : ''}`
+        })
+        btn.disabled = !custom
+        btn.addEventListener('click', () => {
+          if (active.has(day)) {
+            if (active.size <= 1 && !(project.config?.extraWorkdays?.length)) {
+              new Notice(t('projectEdit.atLeastOneWorkday'))
+              return
+            }
+            active.delete(day)
+          } else {
+            active.add(day)
+          }
+          this.patchConfig('workingWeekdays', [...active].sort((a, b) => a - b))
+          this.render()
+        })
+      }
+
+      cb.addEventListener('change', () => {
+        this.patchConfig('workingWeekdays', cb.checked ? [...base] : undefined)
+        this.render()
+      })
+      return cell
+    })
+  }
+
+  private renderExtraWorkdaysRow(props: HTMLElement, project: Project): void {
+    renderPropRow(props, t('projectEdit.extraWorkdays'), () => {
+      const cell = createDiv('pm-prop-value pm-extra-workdays')
+      const controls = cell.createDiv('pm-extra-workdays-controls')
+      const input = controls.createEl('input', { type: 'date', cls: 'pm-input pm-extra-workdays-input' })
+      const addBtn = new ButtonComponent(controls).setButtonText(t('projectEdit.extraWorkdaysAdd'))
+      addBtn.onClick(() => {
+        const iso = input.value.trim()
+        if (!iso || !parsePlainDate(iso)) return
+        const current = project.config?.extraWorkdays ?? []
+        if (!current.includes(iso)) {
+          this.patchConfig('extraWorkdays', [...current, iso].sort())
+          this.render()
+        }
+      })
+
+      const dates = project.config?.extraWorkdays ?? []
+      if (dates.length) {
+        const list = cell.createDiv('pm-extra-workdays-list')
+        for (const iso of dates) {
+          const chip = list.createSpan({ cls: 'pm-extra-workday-chip' })
+          chip.createSpan({ text: formatDate(iso) || iso })
+          new IconButton(chip)
+            .setIcon('x')
+            .setTooltip(t('common.remove'))
+            .onClick(() => {
+              const next = dates.filter((d) => d !== iso)
+              this.patchConfig('extraWorkdays', next.length ? next : undefined)
+              this.render()
+            })
+        }
+      } else {
+        cell.createDiv({ cls: 'pm-modal-hint', text: t('projectEdit.extraWorkdaysHint') })
+      }
+      return cell
+    })
   }
 
   /**

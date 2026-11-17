@@ -142,10 +142,16 @@ describe('VaultIndex', () => {
   it('excludes replaced tasks from project counts while keeping active tasks', async () => {
     await vault.create('Projects/Roadmap.md', projectNote('p1', 'Roadmap'))
     await vault.create('Projects/Roadmap_tasks/old.md', taskNote('t1', 'Old', 'p1', 'superseded'))
+    await vault.create(
+      'Projects/Roadmap_tasks/old-sub.md',
+      `---\npm-task: true\nid: t1a\nprojectId: p1\nparentId: t1\ntitle: Old Sub\nstatus: todo\ndue: 2020-01-01\n---\n\n`
+    )
     await vault.create('Projects/Roadmap_tasks/current.md', taskNote('t2', 'Current', 'p1', 'todo'))
     index.build()
 
-    expect(index.counts(expectDefined(index.projectRef('Projects/Roadmap.md')))).toEqual({ total: 1, done: 0 })
+    const ref = expectDefined(index.projectRef('Projects/Roadmap.md'))
+    expect(index.counts(ref)).toEqual({ total: 1, done: 0 })
+    expect(index.dueSummary(ref)).toEqual({ overdue: 0, latestDue: '' })
   })
 
   it('leaves archived tasks out of a project row', async () => {

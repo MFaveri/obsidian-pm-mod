@@ -5,7 +5,10 @@ import {
   type PMSettings,
   DEFAULT_PALETTE_COLOR,
   DEFAULT_SETTINGS,
+  DEFAULT_WORKING_WEEKDAYS,
   SUPERSEDED_STATUS,
+  Temporal,
+  locale,
   priorityIconSetLabels,
   makeId,
   flattenTasks,
@@ -219,6 +222,48 @@ export class PMSettingTab extends PluginSettingTab {
               type: 'toggle',
               key: 'pullForwardOnEarlyFinish',
               disabled: () => !this.plugin.settings.autoSchedule
+            }
+          },
+          {
+            name: t('settings.workdaysOnly.name'),
+            desc: t('settings.workdaysOnly.desc'),
+            aliases: ['dependencies', 'weekends', 'holidays'],
+            control: {
+              type: 'toggle',
+              key: 'scheduleWorkdaysOnly',
+              disabled: () => !this.plugin.settings.autoSchedule
+            }
+          },
+          {
+            name: t('settings.workingWeekdays.name'),
+            desc: t('settings.workingWeekdays.desc'),
+            aliases: ['dependencies', 'weekends', 'workdays'],
+            render: (setting: Setting) => {
+              const group = setting.controlEl.createDiv('pm-weekday-group')
+              const monday = Temporal.PlainDate.from('2026-01-05')
+              const selected = new Set(this.plugin.settings.workingWeekdays ?? DEFAULT_WORKING_WEEKDAYS)
+              for (let day = 1; day <= 7; day++) {
+                const label = monday.add({ days: day - 1 }).toLocaleString(locale(), { weekday: 'short' })
+                const btn = group.createEl('button', {
+                  type: 'button',
+                  text: label,
+                  cls: `pm-weekday-btn${selected.has(day) ? ' pm-weekday-btn--active' : ''}`
+                })
+                btn.addEventListener('click', () => {
+                  if (selected.has(day)) {
+                    if (selected.size <= 1) {
+                      new Notice(t('projectEdit.atLeastOneWorkday'))
+                      return
+                    }
+                    selected.delete(day)
+                  } else {
+                    selected.add(day)
+                  }
+                  this.plugin.settings.workingWeekdays = [...selected].sort((a, b) => a - b)
+                  btn.toggleClass('pm-weekday-btn--active', selected.has(day))
+                  this.persist()
+                })
+              }
             }
           }
         ]

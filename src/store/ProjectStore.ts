@@ -17,7 +17,9 @@ import {
   resolveProjectConfig,
   computeSchedule,
   assertCanInsertTask,
+  assertCanMaintainDependencies,
   assertCanTransitionTaskStatus,
+  excludeSupersededTasks,
   getReplacementCandidates,
   type DependencyNode,
   wouldCreateReplacementCycle,
@@ -1267,15 +1269,27 @@ export class ProjectStore implements TaskSource {
     const replacementDependencies = [
       ...new Set([...replacement.dependencies.filter((id) => id !== source.id), ...source.dependencies])
     ]
+    const nodes = this.dependencyNodes(project, [
+      { ...replacement, dependencies: replacementDependencies }
+    ])
     if (
       wouldCreateReplacementCycle(
-        [...this.dependencyNodes(project).values()],
+        [...nodes.values()],
         source.id,
         replacement.id,
         replacementDependencies
       )
     ) {
       throw new Error('The replacement would create a dependency cycle.')
+    }
+    if (isExisting) {
+      const statuses = this.statusesFor(project)
+      assertCanMaintainDependencies(
+        this.dependencyNode({ ...replacement, dependencies: replacementDependencies }, statuses),
+        replacementDependencies,
+        nodes,
+        statuses
+      )
     }
 
     if (!isExisting) {
@@ -1288,7 +1302,7 @@ export class ProjectStore implements TaskSource {
     replacement.replaces = source.id
     replacement.updatedAt = new Date().toISOString()
     if (options.duplicateSubtasks) {
-      const clones = cloneTaskForest(source.subtasks)
+      const clones = cloneTaskForest(excludeSupersededTasks(source.subtasks))
       const baseFolder = projectTaskFolder(this.app, project.filePath)
       const claimed = new Set<string>()
       const usedTitles = new Set(flattenTasks(project.tasks).map((entry) => entry.task.title))
@@ -1335,7 +1349,12 @@ export class ProjectStore implements TaskSource {
     this.markDirty(project, [source.id, ...changedDependents], 'fm')
     this.markSubtreeDirty(project, replacement.id, 'full')
     await this.saveProject(project)
-    for (const { project: externalProject } of externalDependents) await this.saveProject(externalProject)
+    const savedExternals = new Set<Project>()
+    for (const { project: externalProject } of externalDependents) {
+      if (savedExternals.has(externalProject)) continue
+      savedExternals.add(externalProject)
+      await this.saveProject(externalProject)
+    }
   }
 
   /**
@@ -1385,6 +1404,8 @@ export class ProjectStore implements TaskSource {
       if (task.dependencies.some((dep) => mapping.has(dep))) {
         task.dependencies = task.dependencies.map((dep) => mapping.get(dep) ?? dep)
       }
+      if (task.replacedBy && mapping.has(task.replacedBy)) task.replacedBy = mapping.get(task.replacedBy)
+      if (task.replaces && mapping.has(task.replaces)) task.replaces = mapping.get(task.replaces)
     }
     if (newProjectId) project.id = makeId()
     rebuildTaskIndex(project)
@@ -1508,6 +1529,10 @@ export class ProjectStore implements TaskSource {
         this.dependencyNode(proposedTask, statuses)
       )
     }
+    if (patch.dependencies !== undefined && (patch.status === undefined || patch.status === task.status)) {
+      const added = patch.dependencies.filter((id) => !task.dependencies.includes(id))
+      assertCanMaintainDependencies(this.dependencyNode(proposedTask, statuses), added, nodes, statuses)
+    }
     if (!patch.subtasks) return
     for (const { task: proposed } of flattenTasks(patch.subtasks)) {
       const current = findTaskById(project, proposed.id)
@@ -1515,14 +1540,20 @@ export class ProjectStore implements TaskSource {
         assertCanInsertTask(this.dependencyNode(proposed, statuses), nodes, statuses)
         continue
       }
-      if (proposed.status === current.status) continue
-      assertCanTransitionTaskStatus(
-        this.dependencyNode(current, statuses),
-        proposed.status,
-        nodes,
-        statuses,
-        this.dependencyNode(proposed, statuses)
-      )
+      if (proposed.status !== current.status) {
+        assertCanTransitionTaskStatus(
+          this.dependencyNode(current, statuses),
+          proposed.status,
+          nodes,
+          statuses,
+          this.dependencyNode(proposed, statuses)
+        )
+        continue
+      }
+      const added = proposed.dependencies.filter((id) => !current.dependencies.includes(id))
+      if (added.length > 0) {
+        assertCanMaintainDependencies(this.dependencyNode(proposed, statuses), added, nodes, statuses)
+      }
     }
   }
 
@@ -1665,19 +1696,44 @@ export class ProjectStore implements TaskSource {
     await this.saveProject(project)
   }
 
+  private clearReplacementRefs(project: Project, deletedIds: Set<string>): void {
+    if (deletedIds.size === 0) return
+    const dirtyIds: string[] = []
+    for (const { task } of flattenTasks(project.tasks)) {
+      let changed = false
+      if (task.replacedBy && deletedIds.has(task.replacedBy)) {
+        task.replacedBy = undefined
+        changed = true
+      }
+      if (task.replaces && deletedIds.has(task.replaces)) {
+        task.replaces = undefined
+        changed = true
+      }
+      if (changed) {
+        task.updatedAt = new Date().toISOString()
+        dirtyIds.push(task.id)
+      }
+    }
+    if (dirtyIds.length > 0) this.markDirty(project, dirtyIds, 'fm')
+  }
+
   async deleteTasks(project: Project, taskIds: string[]): Promise<void> {
     const folder = projectTaskFolder(this.app, project.filePath)
     const dirtyParents = new Set<string>()
+    const deletedIds = new Set<string>()
     for (const id of taskIds) {
       const parentId = findParentId(project, id)
       if (parentId) dirtyParents.add(parentId)
       const task = findTaskById(project, id)
       if (task) {
+        deletedIds.add(task.id)
+        for (const ft of flattenTasks(task.subtasks)) deletedIds.add(ft.task.id)
         await this.deleteTaskFiles(task, folder)
         indexRemoveSubtree(project, task)
       }
       deleteTaskFromTree(project.tasks, id)
     }
+    this.clearReplacementRefs(project, deletedIds)
     // The parents' Subtasks lists shrink.
     if (dirtyParents.size) this.markDirty(project, dirtyParents, 'full')
     await this.saveProject(project)
@@ -1704,11 +1760,15 @@ export class ProjectStore implements TaskSource {
   async deleteTask(project: Project, taskId: string): Promise<void> {
     const parentId = findParentId(project, taskId)
     const task = findTaskById(project, taskId)
+    const deletedIds = new Set<string>()
     if (task) {
+      deletedIds.add(task.id)
+      for (const ft of flattenTasks(task.subtasks)) deletedIds.add(ft.task.id)
       await this.deleteTaskFiles(task, projectTaskFolder(this.app, project.filePath))
       indexRemoveSubtree(project, task)
     }
     deleteTaskFromTree(project.tasks, taskId)
+    this.clearReplacementRefs(project, deletedIds)
     // The parent's Subtasks list shrinks.
     if (parentId) this.markDirty(project, [parentId], 'full')
     await this.saveProject(project)
@@ -1892,7 +1952,13 @@ export class ProjectStore implements TaskSource {
       seeds,
       config.statuses,
       config.pullForwardOnEarlyFinish,
-      this.externalPredecessors(project, loaded)
+      this.externalPredecessors(project, loaded),
+      {
+        workdaysOnly: config.scheduleWorkdaysOnly,
+        workingWeekdays: config.workingWeekdays,
+        holidays: this.getSettings().holidays,
+        extraWorkdays: config.extraWorkdays
+      }
     )
     if (patches.length === 0) return []
 

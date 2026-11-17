@@ -89,6 +89,9 @@ function serializeProjectConfig(config: ProjectConfig | undefined): Record<strin
   if (config.defaultView) out.defaultView = config.defaultView
   if (config.autoSchedule !== undefined) out.autoSchedule = config.autoSchedule
   if (config.pullForwardOnEarlyFinish !== undefined) out.pullForwardOnEarlyFinish = config.pullForwardOnEarlyFinish
+  if (config.scheduleWorkdaysOnly !== undefined) out.scheduleWorkdaysOnly = config.scheduleWorkdaysOnly
+  if (config.workingWeekdays?.length) out.workingWeekdays = config.workingWeekdays
+  if (config.extraWorkdays?.length) out.extraWorkdays = config.extraWorkdays
   if (config.autoArchiveDays !== undefined) out.autoArchiveDays = config.autoArchiveDays
   if (config.showSubtreeConnections !== undefined) out.showSubtreeConnections = config.showSubtreeConnections
   if (config.lineBorders) out.lineBorders = config.lineBorders

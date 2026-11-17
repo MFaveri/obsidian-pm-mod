@@ -49,14 +49,23 @@ export interface TimelineOptions {
   minWidth?: number
 }
 
-/** The days `days` leaves out: Saturdays and Sundays, and the listed holidays. */
+/** The days `days` leaves out: non-working weekdays and listed holidays, minus any explicit extra workdays. */
 export function nonWorkingDay(
   days: NonWorkingDays,
-  holidays: readonly string[]
+  holidays: readonly string[],
+  opts?: { workingWeekdays?: readonly number[]; extraWorkdays?: readonly string[] }
 ): ((date: Temporal.PlainDate) => boolean) | undefined {
   if (!days.weekends && !(days.holidays && holidays.length)) return undefined
   const off = new Set(days.holidays ? holidays : [])
-  return (date) => (!!days.weekends && date.dayOfWeek >= 6) || off.has(date.toString())
+  const extra = new Set(opts?.extraWorkdays ?? [])
+  const weekdays = opts?.workingWeekdays ? new Set(opts.workingWeekdays) : null
+  return (date) => {
+    const iso = date.toString()
+    if (extra.has(iso)) return false
+    if (off.has(iso)) return true
+    if (!days.weekends) return false
+    return weekdays ? !weekdays.has(date.dayOfWeek) : date.dayOfWeek >= 6
+  }
 }
 
 export function clampZoom(zoom: number): number {

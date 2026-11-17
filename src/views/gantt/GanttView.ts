@@ -1,23 +1,21 @@
 import type { Scope } from 'obsidian'
 import type PMPlugin from '#main'
 import {
-  type Task,
-  type NonWorkingDays,
-  type ViewFields,
-  shownFields,
   type GanttGranularity,
+  type GanttRowItem,
+  type NonWorkingDays,
+  type Project,
   type TaskQuery,
-  type FlatTask,
-  excludeSupersededTasks,
-  flattenTasks,
-  includesSupersededFilter,
-  applyTaskFilterPromote,
+  type ViewFields,
+  buildGanttRows,
+  shownFields,
   Temporal,
   today,
   t
 } from '@dotpm/core'
 import { personKeyer, type ProjectScope } from '#store'
 import {
+  drawRowHover,
   renderAddButton,
   svgEl,
   type TimelineCfg,
@@ -32,12 +30,13 @@ import {
 } from '@dotpm/ui'
 import { openAddTask } from '../addTask'
 import type { SubView } from '../SubView'
-import { collapsedTaskIds } from '../collapse'
+import { collapsedGanttProjectPaths, collapsedTaskIds } from '../collapse'
 import { makeDragState } from './GanttDragHandler'
 import type { DragState } from './GanttDragHandler'
 import { makeLinkState, cancelLink } from './GanttLinkHandler'
 import type { LinkState } from './GanttLinkHandler'
 import {
+  drawSummaryBar,
   renderTimelineHeader,
   renderGridLines,
   renderTodayLine,
@@ -46,15 +45,16 @@ import {
   renderMilestoneLabels
 } from './GanttRenderer'
 import type { RendererContext } from './GanttRenderer'
-import { renderTaskLabel } from './TaskLabelRenderer'
+import { renderProjectLabel, renderTaskLabel } from './TaskLabelRenderer'
 
 export class GanttView implements SubView {
   private scrollEl!: HTMLElement
   private svgEl!: SVGSVGElement
   private headerSvgEl!: SVGSVGElement
-  private flatTasks: FlatTask[] = []
+  private rows: GanttRowItem<Project>[] = []
   /** Read from settings once per render pass. */
   private collapsedIds: ReadonlySet<string> = new Set()
+  private collapsedProjectPaths: ReadonlySet<string> = new Set()
   private cfg!: TimelineCfg
   private drag: DragState = makeDragState()
   private link: LinkState = makeLinkState()
@@ -144,12 +144,26 @@ export class GanttView implements SubView {
     this.container.empty()
     this.container.addClass('pm-gantt-view')
 
-    const activeTasks = this.getVisibleTasks()
     this.collapsedIds = collapsedTaskIds(this.plugin.settings, this.scope.projects)
-    this.flatTasks = flattenTasks(activeTasks, this.collapsedIds).filter((f) => f.visible || f.depth === 0)
-    this.cfg = buildTimelineConfig(activeTasks, this.granularity, {
+    this.collapsedProjectPaths = collapsedGanttProjectPaths(this.plugin.settings, this.scope.projects)
+    const filterCtx = this.scope.filterContext(personKeyer(this.plugin.app))
+    const { rows, timelineTasks } = buildGanttRows({
+      projects: this.scope.projects,
+      isMulti: this.scope.isMulti,
+      query: this.query,
+      statusesOf: (project) => this.plugin.store.configFor(project).statuses,
+      filterContextOf: () => filterCtx,
+      collapsedTaskIds: this.collapsedIds,
+      collapsedProjectPaths: this.collapsedProjectPaths
+    })
+    this.rows = rows
+    const extraWorkdays = this.scope.projects.flatMap((p) => this.plugin.store.configFor(p).extraWorkdays)
+    const workingWeekdays = !this.scope.isMulti && this.scope.primary
+      ? this.plugin.store.configFor(this.scope.primary).workingWeekdays
+      : undefined
+    this.cfg = buildTimelineConfig(timelineTasks, this.granularity, {
       zoom: this.zoom,
-      isHidden: nonWorkingDay(this.nonWorkingDays, this.plugin.settings.holidays),
+      isHidden: nonWorkingDay(this.nonWorkingDays, this.plugin.settings.holidays, { workingWeekdays, extraWorkdays }),
       minWidth: this.container.clientWidth - this.labelWidth
     })
 
@@ -218,7 +232,7 @@ export class GanttView implements SubView {
     // Tuck the body's top band (still drawn at y=HEADER_HEIGHT) under the sticky header.
     svgContainer.style.marginTop = `-${HEADER_HEIGHT}px`
 
-    const totalRows = this.flatTasks.filter((f) => f.visible || f.depth === 0).length
+    const totalRows = this.rows.length
     const svgHeight = HEADER_HEIGHT + (totalRows + 1) * ROW_HEIGHT // +1 for add-task row
 
     this.svgEl = svgEl('svg', {
@@ -311,18 +325,32 @@ export class GanttView implements SubView {
       collapsedIds: this.collapsedIds,
       onRefresh: this.onRefresh
     }
-    let rowIndex = 0
-    const renderFlatList = (tasks: Task[], depth: number) => {
-      for (const task of tasks) {
-        renderTaskLabel(leftBody, task, depth, rowIndex, labelCtx)
-        renderTaskBar(barsGroup, task, rowIndex, depth, ctx)
-        rowIndex++
-        if (!this.collapsedIds.has(task.id) && task.subtasks.length) {
-          renderFlatList(task.subtasks, depth + 1)
-        }
+
+    for (const item of this.rows) {
+      if (item.kind === 'project') {
+        renderProjectLabel(
+          leftBody,
+          item.project,
+          item.summary,
+          this.collapsedProjectPaths.has(item.project.filePath),
+          labelCtx
+        )
+        drawRowHover(barsGroup, ctx, item.rowIndex)
+        drawSummaryBar(
+          barsGroup,
+          ctx,
+          {
+            title: item.project.title,
+            color: item.project.color,
+            ...item.summary
+          },
+          item.rowIndex
+        )
+      } else {
+        renderTaskLabel(leftBody, item.task, item.depth, item.rowIndex, labelCtx)
+        renderTaskBar(barsGroup, item.task, item.rowIndex, item.depth, ctx)
       }
     }
-    renderFlatList(this.getVisibleTasks(), 0)
   }
 
   private makeRendererContext(): RendererContext {
@@ -340,20 +368,15 @@ export class GanttView implements SubView {
         priorities: this.scope.config.priorities,
         customFields: this.scope.customFields()
       },
-      flatTasks: this.flatTasks,
+      taskRows: this.rows
+        .filter((item): item is Extract<GanttRowItem<Project>, { kind: 'task' }> => item.kind === 'task')
+        .map((item) => ({ task: item.task, depth: item.depth, row: item.rowIndex })),
+      totalRows: this.rows.length,
       drag: this.drag,
       link: this.link,
       onRefresh: this.onRefresh,
       cleanupFns: this.cleanupFns
     }
-  }
-
-  private getVisibleTasks(): Task[] {
-    return applyTaskFilterPromote(
-      excludeSupersededTasks(this.scope.tasks(), includesSupersededFilter(this.query.filter)),
-      this.query,
-      this.scope.filterContext(personKeyer(this.plugin.app))
-    )
   }
 
   scrollToToday(): void {

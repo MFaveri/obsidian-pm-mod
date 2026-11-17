@@ -48,6 +48,7 @@ export interface TaskRef {
   path: string
   projectId: string
   projectPath: string | null
+  parentId?: string | null
   title: string
   status: string
   priority: string
@@ -332,12 +333,25 @@ export class VaultIndex {
     return new Set([...ref.completeStatusIds, ...global.filter((id) => !own.has(id))])
   }
 
+  /** True when the task itself or any indexed ancestor has the superseded status. */
+  isSuperseded(task: TaskRef): boolean {
+    const visited = new Set<string>()
+    let current: TaskRef | null = task
+    while (current) {
+      if (current.status === 'superseded') return true
+      if (!current.parentId || visited.has(current.id)) return false
+      visited.add(current.id)
+      current = this.taskById.get(current.parentId) ?? null
+    }
+    return false
+  }
+
   /** One task per id, archived ones left out, so counts match what the project's views show. */
   private countableTasks(ref: ProjectRef): TaskRef[] {
     const seen = new Set<string>()
     const tasks: TaskRef[] = []
     for (const task of this.taskRefs(ref.path)) {
-      if (task.archived || task.status === 'superseded' || seen.has(task.id)) continue
+      if (task.archived || this.isSuperseded(task) || seen.has(task.id)) continue
       seen.add(task.id)
       tasks.push(task)
     }
@@ -498,6 +512,7 @@ export class VaultIndex {
 
   private addTask(path: string, frontmatter: Record<string, unknown>): void {
     const projectId = str(frontmatter.projectId)
+    const parentIdRaw = str(frontmatter.parentId)
     const replacedByRaw = str(frontmatter.replacedBy)
     const replacesRaw = str(frontmatter.replaces)
     const ref: TaskRef = {
@@ -505,6 +520,7 @@ export class VaultIndex {
       path,
       projectId,
       projectPath: this.resolveOwner(path, projectId),
+      parentId: parentIdRaw ? refToId(this.app, parentIdRaw, path) : null,
       title: str(frontmatter.title, t('common.untitled')),
       status: str(frontmatter.status, 'todo'),
       priority: str(frontmatter.priority, 'medium'),

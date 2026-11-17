@@ -74,6 +74,7 @@ export function cloneTaskSubtree(source: Task, includeSubtasks: boolean): Task {
   const idMap = new Map<string, string>()
   const clone = cloneNode(source, includeSubtasks, idMap)
   if (includeSubtasks) remapDeps(clone, idMap)
+  clearReplacementLinks(clone)
   return clone
 }
 
@@ -85,7 +86,10 @@ export function cloneTaskSubtree(source: Task, includeSubtasks: boolean): Task {
 export function cloneTaskForest(roots: Task[]): Task[] {
   const idMap = new Map<string, string>()
   const clones = roots.map((root) => cloneNode(root, true, idMap))
-  for (const clone of clones) remapDeps(clone, idMap)
+  for (const clone of clones) {
+    remapDeps(clone, idMap)
+    remapReplacementLinks(clone, idMap)
+  }
   return clones
 }
 
@@ -112,6 +116,18 @@ function cloneNode(source: Task, includeSubtasks: boolean, idMap: Map<string, st
 function remapDeps(task: Task, idMap: Map<string, string>): void {
   task.dependencies = task.dependencies.map((id) => idMap.get(id) ?? id)
   for (const sub of task.subtasks) remapDeps(sub, idMap)
+}
+
+function clearReplacementLinks(task: Task): void {
+  task.replacedBy = undefined
+  task.replaces = undefined
+  for (const sub of task.subtasks) clearReplacementLinks(sub)
+}
+
+function remapReplacementLinks(task: Task, idMap: Map<string, string>): void {
+  task.replacedBy = task.replacedBy ? idMap.get(task.replacedBy) : undefined
+  task.replaces = task.replaces ? idMap.get(task.replaces) : undefined
+  for (const sub of task.subtasks) remapReplacementLinks(sub, idMap)
 }
 
 /** Reorders among siblings only; the two tasks must share a parent. */

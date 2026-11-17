@@ -1,3 +1,4 @@
+import { parsePlainDate } from '../dates'
 import type {
   CustomFieldDef,
   DateBucket,
@@ -333,6 +334,17 @@ function hydrateProjectConfig(raw: unknown): ProjectConfig | undefined {
   }
   if (typeof r.autoSchedule === 'boolean') config.autoSchedule = r.autoSchedule
   if (typeof r.pullForwardOnEarlyFinish === 'boolean') config.pullForwardOnEarlyFinish = r.pullForwardOnEarlyFinish
+  if (typeof r.scheduleWorkdaysOnly === 'boolean') config.scheduleWorkdaysOnly = r.scheduleWorkdaysOnly
+  if (Array.isArray(r.workingWeekdays)) {
+    const days = [...new Set(r.workingWeekdays.filter((d): d is number => typeof d === 'number' && Number.isInteger(d) && d >= 1 && d <= 7))].sort(
+      (a, b) => a - b
+    )
+    if (days.length) config.workingWeekdays = days
+  }
+  if (Array.isArray(r.extraWorkdays)) {
+    const dates = [...new Set(stringList(r.extraWorkdays).filter((d) => parsePlainDate(d) !== null))].sort()
+    if (dates.length) config.extraWorkdays = dates
+  }
   if (typeof r.autoArchiveDays === 'number' && Number.isFinite(r.autoArchiveDays) && r.autoArchiveDays >= 0) {
     config.autoArchiveDays = Math.floor(r.autoArchiveDays)
   }

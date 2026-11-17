@@ -22,6 +22,9 @@ const CONFIG: ResolvedProjectConfig = {
   defaultView: 'table',
   autoSchedule: false,
   pullForwardOnEarlyFinish: false,
+  scheduleWorkdaysOnly: false,
+  workingWeekdays: [1, 2, 3, 4, 5],
+  extraWorkdays: [],
   autoArchiveDays: 0,
   showSubtreeConnections: true,
   lineBorders: 'none'
@@ -187,7 +190,7 @@ describe('snapshot gantt', () => {
   it('draws a label, a bar or diamond per row, and arrows for dependencies', () => {
     const host = document.body.createDiv()
     renderSnapshotGantt(host, model())
-    const labels = Array.from(host.querySelectorAll('.pm-gantt-label-row')).map(
+    const labels = Array.from(host.querySelectorAll('.pm-gantt-label-row[data-task-id]')).map(
       (el) => (el as HTMLElement).dataset.taskId
     )
     expect(labels).toEqual(['a', 'c', 'm', 'b'])
@@ -216,5 +219,25 @@ describe('snapshot gantt', () => {
     renderSnapshotGantt(host, model({ fields: { gantt: { visible: ['title', 'progress', 'cf:sprint'] } } }))
     const asides = Array.from(host.querySelectorAll('.pm-gantt-bar-aside')).map((el) => el.textContent)
     expect(asides).toContain('40%, S1')
+  })
+
+  it('groups tasks under project summary rows when multiple projects are shown', () => {
+    const base = model()
+    const multi = model({
+      projects: [
+        base.projects[0],
+        {
+          ...base.projects[0],
+          id: 'p2',
+          title: 'Beta',
+          tasks: [makeTask({ id: 'x', title: 'X', start: '2026-04-02', due: '2026-04-04' })]
+        }
+      ]
+    })
+    const host = document.body.createDiv()
+    renderSnapshotGantt(host, multi)
+
+    expect(host.querySelectorAll('.pm-gantt-project-row').length).toBe(2)
+    expect(host.querySelectorAll('.pm-gantt-summary-bar').length).toBe(2)
   })
 })

@@ -380,7 +380,9 @@ export function renderTaskFormFields(container: HTMLElement, ctx: TaskFormFields
       .map((f) => f.task)
       .filter((other) => other.id !== task.id)
     const ownIds = new Set(ownTasks.map((other) => other.id))
-    const ownCandidateIds = new Set(getDependencyCandidates(project.tasks, task.id).map((candidate) => candidate.id))
+    const ownCandidateIds = new Set(
+      getDependencyCandidates(project.tasks, task.id, statuses).map((candidate) => candidate.id)
+    )
     // Tasks in other projects can be depended on too, so the picker offers active foreign tasks
     // while preserving any historical ids already selected for removal.
     const foreign = plugin.index

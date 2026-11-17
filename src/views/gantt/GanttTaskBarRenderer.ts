@@ -1,5 +1,5 @@
 import { Notice } from 'obsidian'
-import { type Task, t } from '@dotpm/core'
+import { DependencyBlockedError, ReplacementRequiredError, type Task, t } from '@dotpm/core'
 import {
   svgEl,
   safeAsync,
@@ -10,7 +10,6 @@ import {
   drawMilestoneLabels,
   drawRowHover,
   drawTaskBar,
-  type GanttRow,
   ROW_HEIGHT,
   HEADER_HEIGHT,
   BAR_PADDING,
@@ -32,7 +31,8 @@ export function renderTaskBar(g: SVGGElement, task: Task, row: number, _depth: n
     return
   }
 
-  const color = barColor(ctx, ctx.statuses, task)
+  const taskStatuses = ctx.scope.configOf(task.id).statuses
+  const color = barColor(ctx, taskStatuses, task)
   drawRowHover(g, ctx, row)
 
   if (task.type === 'milestone') {
@@ -43,7 +43,7 @@ export function renderTaskBar(g: SVGGElement, task: Task, row: number, _depth: n
   const drawn = drawTaskBar(
     g,
     ctx,
-    ctx.statuses,
+    taskStatuses,
     task,
     row,
     color,
@@ -196,8 +196,12 @@ function renderEmptyRowClickTarget(g: SVGGElement, task: Task, row: number, ctx:
       try {
         await ctx.plugin.store.updateTask(project, task.id, { start: iso, due: iso })
       } catch (err) {
-        new Notice(t('gantt.setDatesFailed'))
-        console.error('GanttTaskBarRenderer: click-to-set-dates failed', err)
+        if (err instanceof DependencyBlockedError || err instanceof ReplacementRequiredError) {
+          new Notice(err.message)
+        } else {
+          new Notice(t('gantt.setDatesFailed'))
+          console.error('GanttTaskBarRenderer: click-to-set-dates failed', err)
+        }
         return
       }
       await ctx.plugin.store.scheduleAfterChange(project, task.id)
@@ -220,13 +224,9 @@ function renderMilestoneDiamond(g: SVGGElement, task: Task, row: number, color: 
 }
 
 export function renderMilestoneLabels(ctx: RendererContext): void {
-  drawMilestoneLabels(ctx, ctx.statuses, visibleRows(ctx))
+  drawMilestoneLabels(ctx, ctx.statuses, ctx.taskRows, ctx.totalRows)
 }
 
 export function renderDependencyArrows(ctx: RendererContext): void {
-  drawDependencyArrows(ctx, visibleRows(ctx))
-}
-
-function visibleRows(ctx: RendererContext): GanttRow[] {
-  return ctx.flatTasks.filter((f) => f.visible || f.depth === 0).map((f) => ({ task: f.task, depth: f.depth }))
+  drawDependencyArrows(ctx, ctx.taskRows)
 }

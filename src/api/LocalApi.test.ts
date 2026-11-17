@@ -203,4 +203,11 @@ describe('LocalApi over the vault', () => {
     expect((await api.changes(-5)).reset).toBe(true)
     off()
   })
+
+  it('rejects dependency and replacement rule violations with invalid errors', async () => {
+    await expect(api.updateTask('b', { dependencies: ['a'] })).resolves.toMatchObject({ dependencies: ['a'] })
+    await rejectsWith(api.updateTask('b', { status: 'in-progress' }), 'invalid')
+    await rejectsWith(api.updateTask('a', { status: 'superseded' }), 'invalid')
+    await rejectsWith(api.createTask(projectId, { title: 'Blocked new', status: 'in-progress', dependencies: ['a'] }), 'invalid')
+  })
 })

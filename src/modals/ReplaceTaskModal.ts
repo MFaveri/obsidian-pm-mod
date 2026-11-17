@@ -4,6 +4,7 @@ import {
   makeTask,
   type Project,
   type Task,
+  excludeSupersededTasks,
   getReplacementCandidates,
   flattenTasks,
   getDefaultPriorityId,
@@ -35,7 +36,15 @@ export class ReplaceTaskModal extends Modal {
     const config = this.plugin.store.configFor(this.project)
     const allTasks = flattenTasks(this.project.tasks).map((entry) => entry.task)
     const candidates = getReplacementCandidates(this.source, allTasks, config.statuses)
-    const dependents = this.plugin.index.dependents(this.source.id)
+    const localDependentIds = allTasks
+      .filter((task) => task.id !== this.source.id && task.dependencies.includes(this.source.id))
+      .map((task) => task.id)
+    const externalDependentIds = this.plugin.index
+      .dependents(this.source.id)
+      .filter((ref) => ref.projectPath !== this.project.filePath)
+      .map((ref) => ref.id)
+    const dependentIds = new Set([...localDependentIds, ...externalDependentIds])
+    const activeSubtasks = excludeSupersededTasks(this.source.subtasks)
 
     const modeRow = contentEl.createDiv('pm-replace-field')
     modeRow.createEl('label', { text: t('replace.replacement') })
@@ -58,11 +67,11 @@ export class ReplaceTaskModal extends Modal {
     for (const task of candidates) existingSelect.createEl('option', { value: task.id, text: task.title })
 
     let duplicateSubtasks = false
-    if (this.source.subtasks.length > 0) {
+    if (activeSubtasks.length > 0) {
       const duplicateRow = contentEl.createEl('label', { cls: 'pm-replace-checkbox' })
       const duplicateCheckbox = duplicateRow.createEl('input', { type: 'checkbox' })
       duplicateRow.createSpan({
-        text: tn('replace.duplicateSubtasks', this.source.subtasks.length)
+        text: tn('replace.duplicateSubtasks', activeSubtasks.length)
       })
       duplicateCheckbox.addEventListener('change', () => {
         duplicateSubtasks = duplicateCheckbox.checked
@@ -71,23 +80,33 @@ export class ReplaceTaskModal extends Modal {
 
     const preview = contentEl.createDiv('pm-replace-preview')
     preview.createEl('h3', { text: t('replace.changesHeading') })
-    preview.createEl('p', {
-      text: this.source.dependencies.length
-        ? t('replace.inheritedDeps', { count: this.source.dependencies.length })
-        : t('replace.inheritedDepsNone')
-    })
-    preview.createEl('p', {
-      text: dependents.length
-        ? t('replace.dependentsToRedirect', { count: dependents.length })
-        : t('replace.dependentsNone')
-    })
+    const depsPreview = preview.createEl('p')
+    const dependentsPreview = preview.createEl('p')
+
+    const updatePreview = (): void => {
+      const selected =
+        modeSelect.value === 'existing' ? candidates.find((task) => task.id === existingSelect.value) : undefined
+      const inheritedCount = selected
+        ? this.source.dependencies.filter((id) => !selected.dependencies.includes(id)).length
+        : this.source.dependencies.length
+      depsPreview.setText(
+        inheritedCount ? t('replace.inheritedDeps', { count: inheritedCount }) : t('replace.inheritedDepsNone')
+      )
+      const redirectedCount = [...dependentIds].filter((id) => id !== selected?.id).length
+      dependentsPreview.setText(
+        redirectedCount ? t('replace.dependentsToRedirect', { count: redirectedCount }) : t('replace.dependentsNone')
+      )
+    }
 
     const showMode = (): void => {
       const existing = modeSelect.value === 'existing'
       newRow.toggleClass('pm-hidden', existing)
       existingRow.toggleClass('pm-hidden', !existing)
+      updatePreview()
     }
     modeSelect.addEventListener('change', showMode)
+    existingSelect.addEventListener('change', updatePreview)
+    updatePreview()
 
     const errorEl = contentEl.createDiv('pm-replace-error')
     const buttons = contentEl.createDiv('pm-modal-btn-row')
@@ -113,6 +132,7 @@ export class ReplaceTaskModal extends Modal {
         }
         replacement = makeTask({
           title,
+          type: this.source.type,
           status: getDefaultStatusId(config.statuses),
           priority: getDefaultPriorityId(config.priorities),
           start: '',

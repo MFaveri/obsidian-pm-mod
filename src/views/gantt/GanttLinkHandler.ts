@@ -2,7 +2,7 @@ import { Notice } from 'obsidian'
 import type PMPlugin from '#main'
 import type { ProjectScope } from '#store'
 import { safeAsync } from '@dotpm/ui'
-import { t } from '@dotpm/core'
+import { DependencyBlockedError, ReplacementRequiredError, t } from '@dotpm/core'
 
 export interface LinkState {
   active: boolean
@@ -89,8 +89,12 @@ export function handleLinkDotClick(
     try {
       await plugin.store.updateTask(project, successorId, { dependencies: deps })
     } catch (err) {
-      new Notice(t('gantt.linkSaveFailed'))
-      console.error('GanttLinkHandler: save failed', err)
+      if (err instanceof DependencyBlockedError || err instanceof ReplacementRequiredError) {
+        new Notice(err.message)
+      } else {
+        new Notice(t('gantt.linkSaveFailed'))
+        console.error('GanttLinkHandler: save failed', err)
+      }
       return
     }
     await plugin.store.scheduleAfterChange(project, successorId)

@@ -50,6 +50,9 @@ export function viewModelFromSnapshot(snapshot: Snapshot): ViewModel {
         defaultView: snapshot.view.mode,
         autoSchedule: false,
         pullForwardOnEarlyFinish: false,
+        scheduleWorkdaysOnly: false,
+        workingWeekdays: [1, 2, 3, 4, 5],
+        extraWorkdays: [],
         autoArchiveDays: 0,
         showSubtreeConnections: snapshot.settings.showSubtreeConnections,
         lineBorders: snapshot.settings.lineBorders

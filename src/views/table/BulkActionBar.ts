@@ -65,6 +65,7 @@ function updateBarContent(bar: HTMLElement, ctx: TableContext, onAction: (a: Bul
   new ButtonComponent(left).setButtonText(t('bulk.setStatus')).onClick((e) => {
     const menu = new Menu()
     for (const s of ctx.statuses) {
+      if (s.id === 'superseded') continue
       addPaletteMenuItem(menu, s, { onClick: () => onAction({ type: 'set-status', status: s.id }) })
     }
     menu.showAtMouseEvent(e)

@@ -1,7 +1,17 @@
 import { Notice, type KeymapEventHandler, type Scope } from 'obsidian'
 import { confirmDialog } from '#ui/ModalFactory'
 import type PMPlugin from '#main'
-import { t, tn, type TaskQuery, type Project, type SortRule, type ViewFields, shownFields } from '@dotpm/core'
+import {
+  DependencyBlockedError,
+  ReplacementRequiredError,
+  t,
+  tn,
+  type TaskQuery,
+  type Project,
+  type SortRule,
+  type ViewFields,
+  shownFields
+} from '@dotpm/core'
 import type { ProjectScope } from '#store'
 import { safeAsync } from '@dotpm/ui'
 import type { SubView } from '../SubView'
@@ -137,7 +147,11 @@ export class TableView implements SubView {
       await this.onRefresh()
     } catch (err) {
       console.error('Bulk action failed', err)
-      new Notice(t('bulk.failed'))
+      if (err instanceof DependencyBlockedError || err instanceof ReplacementRequiredError) {
+        new Notice(err.message)
+      } else {
+        new Notice(t('bulk.failed'))
+      }
       await this.onRefresh()
     }
   }

@@ -1,5 +1,5 @@
 import { Temporal } from '../dates'
-import type { StatusConfig, Task } from '../types'
+import { DEFAULT_WORKING_WEEKDAYS, type StatusConfig, type Task } from '../types'
 import { isTerminalStatus } from '../utils'
 import { flattenTasks } from './TaskTreeOps'
 
@@ -12,6 +12,76 @@ export interface SchedulePatch {
 export interface ScheduleResult {
   patches: SchedulePatch[]
   cycles: string[][]
+}
+
+export interface ScheduleOptions {
+  workdaysOnly?: boolean
+  workingWeekdays?: readonly number[]
+  holidays?: readonly string[]
+  extraWorkdays?: readonly string[]
+}
+
+interface WorkdayCalendar {
+  workdaysOnly: boolean
+  workingWeekdays: ReadonlySet<number>
+  holidays: ReadonlySet<string>
+  extraWorkdays: ReadonlySet<string>
+}
+
+const MAX_WORKDAY_SCAN = 3650
+
+export function isWorkingDay(date: Temporal.PlainDate, calendar: WorkdayCalendar): boolean {
+  if (!calendar.workdaysOnly) return true
+  const iso = date.toString()
+  if (calendar.extraWorkdays.has(iso)) return true
+  if (calendar.holidays.has(iso)) return false
+  return calendar.workingWeekdays.has(date.dayOfWeek)
+}
+
+function snapForwardToWorkday(date: Temporal.PlainDate, calendar: WorkdayCalendar): Temporal.PlainDate {
+  let cur = date
+  for (let i = 0; i < MAX_WORKDAY_SCAN && !isWorkingDay(cur, calendar); i++) {
+    cur = cur.add({ days: 1 })
+  }
+  return cur
+}
+
+export function stepWorkingDays(date: Temporal.PlainDate, delta: number, calendar: WorkdayCalendar): Temporal.PlainDate {
+  if (!calendar.workdaysOnly) return date.add({ days: delta })
+  if (delta === 0) return snapForwardToWorkday(date, calendar)
+  const step = delta > 0 ? 1 : -1
+  let remaining = Math.abs(delta)
+  let cur = date
+  for (let i = 0; i < MAX_WORKDAY_SCAN && remaining > 0; i++) {
+    cur = cur.add({ days: step })
+    if (isWorkingDay(cur, calendar)) remaining--
+  }
+  return cur
+}
+
+function countWorkingDaysInclusive(start: Temporal.PlainDate, due: Temporal.PlainDate, calendar: WorkdayCalendar): number {
+  if (!calendar.workdaysOnly) return Math.max(1, start.until(due, { largestUnit: 'days' }).days + 1)
+  let count = 0
+  let cur = start
+  while (Temporal.PlainDate.compare(cur, due) <= 0) {
+    if (isWorkingDay(cur, calendar)) count++
+    cur = cur.add({ days: 1 })
+  }
+  return Math.max(1, count)
+}
+
+function workingDaysBetween(a: Temporal.PlainDate, b: Temporal.PlainDate, calendar: WorkdayCalendar): number {
+  if (!calendar.workdaysOnly) return b.since(a, { largestUnit: 'days' }).days
+  const cmp = Temporal.PlainDate.compare(a, b)
+  if (cmp === 0) return 0
+  if (cmp > 0) return -workingDaysBetween(b, a, calendar)
+  let count = 0
+  let cur = a.add({ days: 1 })
+  while (Temporal.PlainDate.compare(cur, b) <= 0) {
+    if (isWorkingDay(cur, calendar)) count++
+    cur = cur.add({ days: 1 })
+  }
+  return count
 }
 
 export function daysBetween(a: string, b: string): number {
@@ -87,8 +157,17 @@ export function computeSchedule(
   statuses: StatusConfig[] = [],
   pullForward = false,
   /** Predecessors in other projects. They constrain dates here but are never moved. */
-  externals: Task[] = []
+  externals: Task[] = [],
+  options: ScheduleOptions = {}
 ): ScheduleResult {
+  const weekdays = new Set(options.workingWeekdays ?? DEFAULT_WORKING_WEEKDAYS)
+  const extraWorkdays = new Set(options.extraWorkdays ?? [])
+  const calendar: WorkdayCalendar = {
+    workdaysOnly: options.workdaysOnly === true && (weekdays.size > 0 || extraWorkdays.size > 0),
+    workingWeekdays: weekdays,
+    holidays: new Set(options.holidays ?? []),
+    extraWorkdays
+  }
   const externalIds = new Set(externals.map((t) => t.id))
   const flat = [...flattenTasks(tasks).map((ft) => ft.task), ...externals]
   const taskById = new Map<string, Task>()
@@ -178,7 +257,10 @@ export function computeSchedule(
     // the one passed here, so its status can't be re-checked from this side.
     if (!externalIds.has(t.id) && !isTerminalStatus(t.status, statuses)) continue
     dueOf.set(t.id, t.completed)
-    daysSavedBy.set(t.id, daysBetween(t.completed, t.due))
+    daysSavedBy.set(
+      t.id,
+      workingDaysBetween(Temporal.PlainDate.from(t.completed), Temporal.PlainDate.from(t.due), calendar)
+    )
   }
 
   const patches: SchedulePatch[] = []
@@ -203,17 +285,30 @@ export function computeSchedule(
       const depDue = dueOf.get(depId) ?? ''
       if (!depDue) continue
       if (!latestDue || depDue > latestDue) latestDue = depDue
-      const plannedDue = addDays(depDue, daysSavedBy.get(depId) ?? 0)
+      const plannedDue = stepWorkingDays(
+        Temporal.PlainDate.from(depDue),
+        daysSavedBy.get(depId) ?? 0,
+        calendar
+      ).toString()
       if (!latestPlannedDue || plannedDue > latestPlannedDue) latestPlannedDue = plannedDue
     }
     if (!latestDue) continue
 
-    const earliestStart = addDays(latestDue, 1)
-    const daysSaved = daysBetween(latestDue, latestPlannedDue)
+    const earliestStartDate = stepWorkingDays(Temporal.PlainDate.from(latestDue), 1, calendar)
+    const earliestStart = earliestStartDate.toString()
+    const daysSaved = workingDaysBetween(
+      Temporal.PlainDate.from(latestDue),
+      Temporal.PlainDate.from(latestPlannedDue),
+      calendar
+    )
     const currentStart = startOf.get(id) ?? ''
     const currentDue = dueOf.get(id) ?? ''
 
-    const pullBy = (anchor: string) => Math.min(daysSaved, Math.max(0, daysBetween(earliestStart, anchor)))
+    const pullBy = (anchor: string) =>
+      Math.min(
+        daysSaved,
+        Math.max(0, workingDaysBetween(earliestStartDate, Temporal.PlainDate.from(anchor), calendar))
+      )
 
     let newStart = currentStart
     let newDue = currentDue
@@ -227,25 +322,27 @@ export function computeSchedule(
         newDue = earliestStart
       } else if (daysSaved > 0) {
         pulled = pullBy(currentDue)
-        newDue = addDays(currentDue, -pulled)
+        newDue = stepWorkingDays(Temporal.PlainDate.from(currentDue), -pulled, calendar).toString()
       }
     } else if (currentStart && currentDue) {
+      const startDate = Temporal.PlainDate.from(currentStart)
+      const dueDate = Temporal.PlainDate.from(currentDue)
+      const duration = countWorkingDaysInclusive(startDate, dueDate, calendar)
       if (currentStart < earliestStart) {
-        // Both ends are inclusive, so the span is one day longer than the gap.
-        const duration = daysBetween(currentStart, currentDue) + 1
         newStart = earliestStart
-        newDue = addDays(earliestStart, duration - 1)
+        newDue = stepWorkingDays(earliestStartDate, duration - 1, calendar).toString()
       } else if (daysSaved > 0) {
         pulled = pullBy(currentStart)
-        newStart = addDays(currentStart, -pulled)
-        newDue = addDays(currentDue, -pulled)
+        const pulledStart = stepWorkingDays(startDate, -pulled, calendar)
+        newStart = pulledStart.toString()
+        newDue = stepWorkingDays(pulledStart, duration - 1, calendar).toString()
       }
     } else if (currentStart && !currentDue) {
       if (currentStart < earliestStart) {
         newStart = earliestStart
       } else if (daysSaved > 0) {
         pulled = pullBy(currentStart)
-        newStart = addDays(currentStart, -pulled)
+        newStart = stepWorkingDays(Temporal.PlainDate.from(currentStart), -pulled, calendar).toString()
       }
     } else {
       newStart = earliestStart

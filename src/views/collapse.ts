@@ -21,7 +21,25 @@ export function toggleCollapsed(settings: PMSettings, project: Project, taskId: 
   settings.collapsedTasks[project.filePath] = ids
 }
 
-export function setAllCollapsed(settings: PMSettings, projects: Project[], collapsed: boolean): void {
+export function collapsedGanttProjectPaths(settings: PMSettings, projects: Project[]): ReadonlySet<string> {
+  const inScope = new Set(projects.map((p) => p.filePath))
+  return new Set((settings.collapsedGanttProjects ?? []).filter((path) => inScope.has(path)))
+}
+
+export function toggleGanttProjectCollapsed(settings: PMSettings, projectPath: string): void {
+  const paths = settings.collapsedGanttProjects ?? []
+  const at = paths.indexOf(projectPath)
+  if (at === -1) paths.push(projectPath)
+  else paths.splice(at, 1)
+  settings.collapsedGanttProjects = paths
+}
+
+export function setAllCollapsed(
+  settings: PMSettings,
+  projects: Project[],
+  collapsed: boolean,
+  includeProjects = false
+): void {
   for (const project of projects) {
     settings.collapsedTasks[project.filePath] = collapsed
       ? flattenTasks(project.tasks)
@@ -29,4 +47,8 @@ export function setAllCollapsed(settings: PMSettings, projects: Project[], colla
           .map((flat) => flat.task.id)
       : []
   }
+  if (!includeProjects) return
+  const scopePaths = new Set(projects.map((p) => p.filePath))
+  const remaining = (settings.collapsedGanttProjects ?? []).filter((path) => !scopePaths.has(path))
+  settings.collapsedGanttProjects = collapsed ? [...remaining, ...scopePaths] : remaining
 }

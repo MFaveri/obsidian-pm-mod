@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { makeTask, type StatusConfig } from '../types'
 import {
+  assertCanMaintainDependencies,
   assertCanTransitionTaskStatus,
   canTransitionTaskStatus,
   getUnresolvedDependencies,
@@ -111,5 +112,39 @@ describe('dependency rules', () => {
     const nodes = new Map([blocker, target].map((task) => [task.id, task]))
 
     expect(() => assertCanTransitionTaskStatus(target, 'doing', nodes, STATUSES)).toThrow('Required approval')
+  })
+
+  it('allows cancelling a blocked task without treating active statuses placed first as planning', () => {
+    const blocker = node('blocker')
+    const target = node('target', { dependencies: [blocker.id] })
+    const nodes = new Map([blocker, target].map((task) => [task.id, task]))
+    const reordered: StatusConfig[] = [
+      { id: 'in-progress', label: 'In Progress', color: '', icon: '', complete: false },
+      { id: 'todo', label: 'To Do', color: '', icon: '', complete: false },
+      { id: 'cancelled', label: 'Cancelled', color: '', icon: '', complete: true }
+    ]
+
+    expect(canTransitionTaskStatus(target, 'cancelled', nodes, reordered)).toBe(true)
+    expect(canTransitionTaskStatus(target, 'in-progress', nodes, reordered)).toBe(false)
+  })
+
+  it('blocks adding an unresolved dependency to an already active task', () => {
+    const blocker = node('blocker', { title: 'Open prereq' })
+    const done = node('done', { status: 'done', terminal: true })
+    const active = node('active', { status: 'doing', dependencies: [blocker.id] })
+    const nodes = new Map([blocker, done, active].map((task) => [task.id, task]))
+
+    expect(() => assertCanMaintainDependencies(active, [blocker.id], nodes, STATUSES)).toThrow('Open prereq')
+    expect(() => assertCanMaintainDependencies(active, [done.id], nodes, STATUSES)).not.toThrow()
+  })
+
+  it('excludes ancestors of the source task from replacement candidates', () => {
+    const child = makeTask({ id: 'child' })
+    const parent = makeTask({ id: 'parent', subtasks: [child] })
+    const sibling = makeTask({ id: 'sibling' })
+
+    expect(getReplacementCandidates(child, [parent, child, sibling], STATUSES).map((task) => task.id)).toEqual([
+      'sibling'
+    ])
   })
 })

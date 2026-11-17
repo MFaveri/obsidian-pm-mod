@@ -65,6 +65,9 @@ describe('resolveProjectConfig', () => {
         priorityIcons: 'signal',
         autoSchedule: false,
         pullForwardOnEarlyFinish: true,
+        scheduleWorkdaysOnly: true,
+        workingWeekdays: [6],
+        extraWorkdays: ['2026-11-21'],
         showSubtreeConnections: false,
         lineBorders: 'both'
       }),
@@ -74,6 +77,9 @@ describe('resolveProjectConfig', () => {
     expect(resolved.priorityIcons).toBe('signal')
     expect(resolved.autoSchedule).toBe(false)
     expect(resolved.pullForwardOnEarlyFinish).toBe(true)
+    expect(resolved.scheduleWorkdaysOnly).toBe(true)
+    expect(resolved.workingWeekdays).toEqual([6])
+    expect(resolved.extraWorkdays).toEqual(['2026-11-21'])
     expect(resolved.showSubtreeConnections).toBe(false)
     expect(resolved.lineBorders).toBe('both')
     expect(resolved.statuses).toEqual(DEFAULT_STATUSES)

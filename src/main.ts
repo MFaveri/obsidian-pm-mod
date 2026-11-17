@@ -425,7 +425,9 @@ export default class PMPlugin extends Plugin {
     if (!this.settings.scopeViews) this.settings.scopeViews = {}
     if (!this.settings.collapsedTasks) this.settings.collapsedTasks = {}
     if (!this.settings.collapsedProjects) this.settings.collapsedProjects = []
+    if (!this.settings.collapsedGanttProjects) this.settings.collapsedGanttProjects = []
     if (!this.settings.excludedFolders) this.settings.excludedFolders = []
+    if (!Array.isArray(this.settings.workingWeekdays)) this.settings.workingWeekdays = [1, 2, 3, 4, 5]
 
     let migrated = ensureSupersededStatus(this.settings.statuses)
     // Filters were keyed by project path before a view could cover several projects.
@@ -647,11 +649,16 @@ export default class PMPlugin extends Plugin {
       this.app.vault.getAbstractFileByPath(path)
     )
     if (collapsedProjects.length !== this.settings.collapsedProjects.length) dirty = true
+    const collapsedGanttProjects = this.settings.collapsedGanttProjects.filter((path) =>
+      this.app.vault.getAbstractFileByPath(path)
+    )
+    if (collapsedGanttProjects.length !== this.settings.collapsedGanttProjects.length) dirty = true
     if (dirty) {
       this.settings.projectFilters = cleaned
       this.settings.scopeViews = cleanedScopeViews
       this.settings.collapsedTasks = cleanedCollapsed
       this.settings.collapsedProjects = collapsedProjects
+      this.settings.collapsedGanttProjects = collapsedGanttProjects
       await this.saveSettings()
     }
   }

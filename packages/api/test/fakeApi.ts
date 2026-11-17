@@ -27,6 +27,9 @@ const CONFIG = {
   defaultView: 'table' as const,
   autoSchedule: false,
   pullForwardOnEarlyFinish: false,
+  scheduleWorkdaysOnly: false,
+  workingWeekdays: [1, 2, 3, 4, 5],
+  extraWorkdays: [],
   autoArchiveDays: 0,
   showSubtreeConnections: true,
   lineBorders: 'none' as const

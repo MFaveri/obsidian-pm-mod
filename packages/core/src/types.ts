@@ -294,6 +294,11 @@ export interface ProjectConfig {
   defaultView?: ViewMode
   autoSchedule?: boolean
   pullForwardOnEarlyFinish?: boolean
+  scheduleWorkdaysOnly?: boolean
+  /** ISO weekday numbers (1 = Monday .. 7 = Sunday) considered working days for this project. */
+  workingWeekdays?: number[]
+  /** Specific YYYY-MM-DD dates treated as working days one by one, overriding weekends/holidays. */
+  extraWorkdays?: string[]
   autoArchiveDays?: number
   showSubtreeConnections?: boolean
   lineBorders?: LineBorders
@@ -311,6 +316,9 @@ export interface ResolvedProjectConfig {
   defaultView: ViewMode
   autoSchedule: boolean
   pullForwardOnEarlyFinish: boolean
+  scheduleWorkdaysOnly: boolean
+  workingWeekdays: number[]
+  extraWorkdays: string[]
   autoArchiveDays: number
   showSubtreeConnections: boolean
   lineBorders: LineBorders
@@ -370,6 +378,9 @@ export interface PMSettings {
   lastAutoArchiveDate: string
   autoSchedule: boolean
   pullForwardOnEarlyFinish: boolean
+  scheduleWorkdaysOnly: boolean
+  /** ISO weekday numbers (1 = Monday .. 7 = Sunday) considered working days by default. */
+  workingWeekdays: number[]
   showSubtreeConnections: boolean
   lineBorders: LineBorders
   showTagColors: boolean
@@ -391,6 +402,8 @@ export interface PMSettings {
   collapsedTasks: Record<string, string[]>
   /** Paths of projects whose sub-projects are collapsed in the project list. */
   collapsedProjects: string[]
+  /** Paths of projects collapsed in the multi-project Gantt view. */
+  collapsedGanttProjects: string[]
   /** Whether the project list shows archived projects. */
   showArchivedProjects: boolean
   projectList: ProjectListState
@@ -462,6 +475,8 @@ export function defaultPriorities(): PriorityConfig[] {
 export const LOCAL_API_PORT_BASE = 27140
 export const LOCAL_API_PORT_SPAN = 100
 
+export const DEFAULT_WORKING_WEEKDAYS = [1, 2, 3, 4, 5]
+
 export const DEFAULT_SETTINGS: PMSettings = {
   projectsFolder: 'Projects',
   peopleFolder: 'People',
@@ -485,6 +500,8 @@ export const DEFAULT_SETTINGS: PMSettings = {
   lastAutoArchiveDate: '',
   autoSchedule: true,
   pullForwardOnEarlyFinish: false,
+  scheduleWorkdaysOnly: false,
+  workingWeekdays: [...DEFAULT_WORKING_WEEKDAYS],
   saveTaskOnClose: true,
   taskEditorSurface: 'modal',
   editorSaveModifier: 'Shift',
@@ -494,6 +511,7 @@ export const DEFAULT_SETTINGS: PMSettings = {
   scopeViews: {},
   collapsedTasks: {},
   collapsedProjects: [],
+  collapsedGanttProjects: [],
   showArchivedProjects: false,
   projectList: makeDefaultProjectList(),
   projectListViews: [],

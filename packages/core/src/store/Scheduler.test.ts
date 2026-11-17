@@ -304,3 +304,86 @@ describe('computeSchedule with predecessors in other projects', () => {
     expect(computeSchedule(tasks, undefined, statuses).patches).toEqual([])
   })
 })
+
+describe('computeSchedule with workdaysOnly and holidays', () => {
+  const statuses: StatusConfig[] = [
+    { id: 'todo', label: 'Todo', color: '#888', icon: '', complete: false },
+    { id: 'done', label: 'Done', color: '#0a0', icon: '', complete: true }
+  ]
+
+  it('pushes a dependent starting after Friday to Monday and preserves working-day duration', () => {
+    // 2026-04-03 is Friday; 2026-04-06 is Monday.
+    // Task b originally runs Mon 2026-03-30 to Wed 2026-04-01 (3 working days).
+    const tasks = [
+      task({ id: 'a', start: '2026-04-01', due: '2026-04-03' }),
+      task({ id: 'b', start: '2026-03-30', due: '2026-04-01', dependencies: ['a'] })
+    ]
+    const result = computeSchedule(tasks, undefined, statuses, false, [], { workdaysOnly: true })
+    expect(result.patches).toEqual([{ taskId: 'b', start: '2026-04-06', due: '2026-04-08' }])
+  })
+
+  it('skips weekends and holidays inside a dependent task span and on start', () => {
+    // 2026-04-03 is Friday; Monday 2026-04-06 is a holiday, Wednesday 2026-04-08 is a holiday.
+    // A 3-working-day task starts Tue 2026-04-07, skips Wed 04-08, includes Thu 04-09 & Fri 04-10.
+    const tasks = [
+      task({ id: 'a', start: '2026-04-01', due: '2026-04-03' }),
+      task({ id: 'b', start: '2026-03-30', due: '2026-04-01', dependencies: ['a'] })
+    ]
+    const result = computeSchedule(tasks, undefined, statuses, false, [], {
+      workdaysOnly: true,
+      holidays: ['2026-04-06', '2026-04-08']
+    })
+    expect(result.patches).toEqual([{ taskId: 'b', start: '2026-04-07', due: '2026-04-10' }])
+  })
+
+  it('places milestones on the next working day', () => {
+    const tasks = [
+      task({ id: 'a', start: '2026-04-01', due: '2026-04-03' }),
+      task({ id: 'm', type: 'milestone', start: '', due: '2026-04-03', dependencies: ['a'] })
+    ]
+    const result = computeSchedule(tasks, undefined, statuses, false, [], { workdaysOnly: true })
+    expect(result.patches).toEqual([{ taskId: 'm', start: '', due: '2026-04-06' }])
+  })
+
+  it('pulls dependent forward in working days without landing on weekends or holidays', () => {
+    // Predecessor planned due Fri 2026-04-10, finished early on Wed 2026-04-08 (2 working days saved).
+    // Dependent starts Mon 2026-04-13 for 3 working days (Mon..Wed). Pulling 2 working days lands on Thu 2026-04-09 -> Mon 2026-04-13.
+    const tasks = [
+      task({ id: 'a', status: 'done', start: '2026-04-06', due: '2026-04-10', completed: '2026-04-08' }),
+      task({ id: 'b', start: '2026-04-13', due: '2026-04-15', dependencies: ['a'] })
+    ]
+    const result = computeSchedule(tasks, undefined, statuses, true, [], { workdaysOnly: true })
+    expect(result.patches).toEqual([{ taskId: 'b', start: '2026-04-09', due: '2026-04-13' }])
+  })
+
+  it('schedules a Saturdays-only project across consecutive Saturdays', () => {
+    // 2026-04-04 is Saturday. A 2-working-day dependent spans Sat 2026-04-11 to Sat 2026-04-18.
+    const tasks = [
+      task({ id: 'a', start: '2026-04-04', due: '2026-04-04' }),
+      task({ id: 'b', start: '2026-03-21', due: '2026-03-28', dependencies: ['a'] })
+    ]
+    const result = computeSchedule(tasks, undefined, statuses, false, [], {
+      workdaysOnly: true,
+      workingWeekdays: [6]
+    })
+    expect(result.patches).toEqual([{ taskId: 'b', start: '2026-04-11', due: '2026-04-18' }])
+  })
+
+  it('treats specific extraWorkdays as working days one by one without affecting other Saturdays', () => {
+    // 2026-11-20 is Friday; Sat 2026-11-21 is explicitly worked, while Sat 2026-11-28 stays off.
+    const tasks = [
+      task({ id: 'a', start: '2026-11-18', due: '2026-11-20' }),
+      task({ id: 'b', start: '2026-11-16', due: '2026-11-17', dependencies: ['a'] }),
+      task({ id: 'c', start: '2026-11-25', due: '2026-11-27' }),
+      task({ id: 'd', start: '2026-11-23', due: '2026-11-23', dependencies: ['c'] })
+    ]
+    const result = computeSchedule(tasks, undefined, statuses, false, [], {
+      workdaysOnly: true,
+      extraWorkdays: ['2026-11-21']
+    })
+    expect(result.patches).toEqual([
+      { taskId: 'b', start: '2026-11-21', due: '2026-11-23' },
+      { taskId: 'd', start: '2026-11-30', due: '2026-11-30' }
+    ])
+  })
+})
