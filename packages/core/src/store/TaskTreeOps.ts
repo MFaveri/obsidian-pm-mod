@@ -101,6 +101,8 @@ function cloneNode(source: Task, includeSubtasks: boolean, idMap: Map<string, st
     ...source,
     id: newId,
     filePath: undefined,
+    baselineStart: undefined,
+    baselineDue: undefined,
     createdAt: now,
     updatedAt: now,
     subtasks: includeSubtasks ? source.subtasks.map((s) => cloneNode(s, true, idMap)) : [],

@@ -19,6 +19,7 @@ export interface ScheduleOptions {
   workingWeekdays?: readonly number[]
   holidays?: readonly string[]
   extraWorkdays?: readonly string[]
+  extraNonWorkdays?: readonly string[]
 }
 
 export interface CriticalPathOptions extends ScheduleOptions {
@@ -45,11 +46,41 @@ export interface CriticalPathResult {
   cycles: string[][]
 }
 
+export interface BaselineVariance {
+  baselineStart: string
+  baselineDue: string
+  startDeltaDays: number
+  dueDeltaDays: number
+}
+
+/**
+ * Compares a task's current scheduled start/due against its captured baseline.
+ * Positive deltas mean slipped later than planned; negative deltas mean ahead.
+ */
+export function computeBaselineVariance(task: Task, options: ScheduleOptions = {}): BaselineVariance | null {
+  const bStart = parsePlainDate(task.baselineStart ?? '') ?? parsePlainDate(task.baselineDue ?? '')
+  const bDue = parsePlainDate(task.baselineDue ?? '') ?? parsePlainDate(task.baselineStart ?? '')
+  if (!bStart || !bDue) return null
+
+  const calendar = buildWorkdayCalendar(options)
+  const curStart = parsePlainDate(task.start) ?? parsePlainDate(task.due)
+  const curDue = parsePlainDate(task.due) ?? parsePlainDate(task.start)
+  const startDeltaDays = curStart ? workingDaysBetween(bStart, curStart, calendar) : 0
+  const dueDeltaDays = curDue ? workingDaysBetween(bDue, curDue, calendar) : 0
+  return {
+    baselineStart: bStart.toString(),
+    baselineDue: bDue.toString(),
+    startDeltaDays,
+    dueDeltaDays
+  }
+}
+
 interface WorkdayCalendar {
   workdaysOnly: boolean
   workingWeekdays: ReadonlySet<number>
   holidays: ReadonlySet<string>
   extraWorkdays: ReadonlySet<string>
+  extraNonWorkdays: ReadonlySet<string>
 }
 
 const MAX_WORKDAY_SCAN = 3650
@@ -57,6 +88,7 @@ const MAX_WORKDAY_SCAN = 3650
 export function isWorkingDay(date: Temporal.PlainDate, calendar: WorkdayCalendar): boolean {
   if (!calendar.workdaysOnly) return true
   const iso = date.toString()
+  if (calendar.extraNonWorkdays.has(iso)) return false
   if (calendar.extraWorkdays.has(iso)) return true
   if (calendar.holidays.has(iso)) return false
   return calendar.workingWeekdays.has(date.dayOfWeek)
@@ -172,7 +204,8 @@ function buildWorkdayCalendar(options: ScheduleOptions = {}): WorkdayCalendar {
     workdaysOnly: options.workdaysOnly === true && (workingWeekdays.size > 0 || extraWorkdays.size > 0),
     workingWeekdays,
     holidays: new Set(options.holidays ?? []),
-    extraWorkdays
+    extraWorkdays,
+    extraNonWorkdays: new Set(options.extraNonWorkdays ?? [])
   }
 }
 

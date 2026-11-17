@@ -8,6 +8,7 @@ import {
   getPriorityConfig,
   getStatusConfig,
   parsePlainDate,
+  Temporal,
   t,
   tn
 } from '@dotpm/core'
@@ -29,6 +30,8 @@ export interface ProjectSummaryBarInput {
   color: string
   start: string
   due: string
+  baselineStart?: string
+  baselineDue?: string
   progress: number
   done: number
   total: number
@@ -70,8 +73,36 @@ export interface BarCriticalInfo {
   highlight?: boolean
 }
 
+export interface BarBaselineInfo {
+  baselineStart: string
+  baselineDue: string
+  startDeltaDays: number
+  dueDeltaDays: number
+  /** When true, draws the baseline bar or milestone ghost on the canvas. */
+  showBar?: boolean
+}
+
 function formatSlackTooltip(info: BarCriticalInfo): string {
   return info.critical ? t('gantt.tooltipCritical') : tn('gantt.tooltipSlack', info.slackDays)
+}
+
+function formatBaselineTooltip(info: BarBaselineInfo): string {
+  const startLabel = formatDateShort(info.baselineStart)
+  const dueLabel = formatDateShort(info.baselineDue)
+  const range = info.baselineStart === info.baselineDue ? dueLabel : `${startLabel} – ${dueLabel}`
+  const variance =
+    info.dueDeltaDays === 0
+      ? t('gantt.tooltipBaselineOnTime')
+      : info.dueDeltaDays > 0
+        ? `+${info.dueDeltaDays}d`
+        : `${info.dueDeltaDays}d`
+  return t('gantt.tooltipBaseline', { range, variance })
+}
+
+function baselineVarianceClass(deltaDays: number, prefix: string): string {
+  if (deltaDays > 0) return `${prefix} ${prefix}--late`
+  if (deltaDays < 0) return `${prefix} ${prefix}--ahead`
+  return prefix
 }
 
 export interface LabelSource {
@@ -114,7 +145,8 @@ export function drawTaskBar(
   row: number,
   color: string,
   aside = '',
-  criticalInfo?: BarCriticalInfo
+  criticalInfo?: BarCriticalInfo,
+  baselineInfo?: BarBaselineInfo
 ): DrawnBar | null {
   const startDate = parsePlainDate(task.start)
   const endDate = parsePlainDate(task.due)
@@ -200,8 +232,34 @@ export function drawTaskBar(
   if (criticalInfo) {
     lines.push(formatSlackTooltip(criticalInfo))
   }
+  if (baselineInfo) {
+    lines.push(formatBaselineTooltip(baselineInfo))
+  }
   tooltip.textContent = lines.join('\n')
   rect.appendChild(tooltip)
+
+  if (baselineInfo?.showBar) {
+    const bStart = parsePlainDate(baselineInfo.baselineStart)
+    const bDue = parsePlainDate(baselineInfo.baselineDue)
+    if (bStart && bDue) {
+      const bEffDue = (Temporal.PlainDate.compare(bDue, bStart) < 0 ? bStart : bDue).add({ days: 1 })
+      const bx = Math.max(0, dateToX(canvas.cfg, bStart))
+      const bxEnd = Math.min(canvas.cfg.totalWidth, dateToX(canvas.cfg, bEffDue))
+      const bw = Math.max(6, bxEnd - bx)
+      barGroup.appendChild(
+        svgEl('rect', {
+          x: bx,
+          y: y + height + 2,
+          width: bw,
+          height: 4,
+          rx: 2,
+          ry: 2,
+          class: baselineVarianceClass(baselineInfo.dueDeltaDays, 'pm-gantt-baseline-bar'),
+          'pointer-events': 'none'
+        })
+      )
+    }
+  }
 
   return { barGroup, rect, x, y, width, height }
 }
@@ -214,7 +272,8 @@ export function drawSummaryBar(
   g: SVGGElement,
   canvas: GanttCanvas,
   summary: ProjectSummaryBarInput,
-  row: number
+  row: number,
+  showBaseline = false
 ): SVGGElement | null {
   const startDate = parsePlainDate(summary.start)
   const endDate = parsePlainDate(summary.due)
@@ -281,11 +340,45 @@ export function drawSummaryBar(
   )
 
   const tooltip = svgEl('title', {})
-  tooltip.textContent = [
+  const summaryLines = [
     summary.title,
     `${t('gantt.tooltipStart', { date: summary.start || '—' })}  ${t('gantt.tooltipDue', { date: summary.due || '—' })}`,
     `${t('overview.doneOfTotal', { done: summary.done, total: summary.total })} (${summary.progress}%)`
-  ].join('\n')
+  ]
+  if (showBaseline && summary.baselineStart && summary.baselineDue) {
+    const bStart = parsePlainDate(summary.baselineStart)
+    const bDue = parsePlainDate(summary.baselineDue)
+    if (bStart && bDue) {
+      const bEffEnd = (Temporal.PlainDate.compare(bDue, bStart) < 0 ? bStart : bDue).add({ days: 1 })
+      const bx = Math.max(0, dateToX(canvas.cfg, bStart))
+      const bxEnd = Math.min(canvas.cfg.totalWidth, dateToX(canvas.cfg, bEffEnd))
+      const bw = Math.max(6, bxEnd - bx)
+      group.appendChild(
+        svgEl('rect', {
+          x: bx,
+          y: barTop + barHeight + 3,
+          width: bw,
+          height: 3,
+          rx: 1.5,
+          ry: 1.5,
+          class: 'pm-gantt-baseline-bar',
+          'pointer-events': 'none'
+        })
+      )
+      summaryLines.push(
+        t('gantt.tooltipBaseline', {
+          range: `${formatDateShort(summary.baselineStart)} – ${formatDateShort(summary.baselineDue)}`,
+          variance:
+            summary.due === summary.baselineDue
+              ? t('gantt.tooltipBaselineOnTime')
+              : summary.due > summary.baselineDue
+                ? `+${Temporal.PlainDate.from(summary.due).since(bDue, { largestUnit: 'days' }).days}d`
+                : `-${bDue.since(Temporal.PlainDate.from(summary.due), { largestUnit: 'days' }).days}d`
+        })
+      )
+    }
+  }
+  tooltip.textContent = summaryLines.join('\n')
   group.appendChild(tooltip)
 
   return group
@@ -297,13 +390,28 @@ export function drawMilestoneDiamond(
   task: Task,
   row: number,
   color: string,
-  criticalInfo?: BarCriticalInfo
+  criticalInfo?: BarCriticalInfo,
+  baselineInfo?: BarBaselineInfo
 ): SVGPolygonElement | null {
   const date = parsePlainDate(task.due) ?? parsePlainDate(task.start)
   if (!date) return null
   const cx = dateToX(canvas.cfg, date) + canvas.cfg.dayWidth / 2
   const cy = HEADER_HEIGHT + row * ROW_HEIGHT + ROW_HEIGHT / 2
   const size = 12
+  if (baselineInfo?.showBar) {
+    const bDate = parsePlainDate(baselineInfo.baselineDue) ?? parsePlainDate(baselineInfo.baselineStart)
+    if (bDate) {
+      const bcx = dateToX(canvas.cfg, bDate) + canvas.cfg.dayWidth / 2
+      const bSize = 9
+      g.appendChild(
+        svgEl('polygon', {
+          points: `${bcx},${cy - bSize} ${bcx + bSize},${cy} ${bcx},${cy + bSize} ${bcx - bSize},${cy}`,
+          class: baselineVarianceClass(baselineInfo.dueDeltaDays, 'pm-gantt-baseline-milestone'),
+          'pointer-events': 'none'
+        })
+      )
+    }
+  }
   const highlightClass = criticalInfo?.highlight
     ? criticalInfo.critical
       ? ' pm-gantt-milestone--critical'
@@ -323,6 +431,7 @@ export function drawMilestoneDiamond(
     t('gantt.tooltipDate', { date: task.due || task.start || '—' })
   ]
   if (criticalInfo) lines.push(formatSlackTooltip(criticalInfo))
+  if (baselineInfo) lines.push(formatBaselineTooltip(baselineInfo))
   tooltip.textContent = lines.join('\n')
   diamond.appendChild(tooltip)
   return diamond

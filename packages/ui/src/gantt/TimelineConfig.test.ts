@@ -92,11 +92,21 @@ describe('non-working days', () => {
     expect(nonWorkingDay({ holidays: true }, [])).toBeUndefined()
   })
 
-  it('respects custom workingWeekdays and keeps specific extraWorkdays visible', () => {
-    const fn = nonWorkingDay({ weekends: true, holidays: true }, ['2026-11-23'], {
+  it('respects custom workingWeekdays, extraWorkdays, and extraNonWorkdays', () => {
+    const onlyTimeOff = nonWorkingDay({ timeOff: true }, ['2026-11-23'], {
       workingWeekdays: [1, 2, 3, 4, 5],
-      extraWorkdays: ['2026-11-21']
+      extraNonWorkdays: ['2026-11-18']
     })
+    expect(onlyTimeOff?.(date('2026-11-18'))).toBe(true) // explicit day off hidden
+    expect(onlyTimeOff?.(date('2026-11-22'))).toBe(false) // weekend visible when weekends is off
+    expect(onlyTimeOff?.(date('2026-11-23'))).toBe(false) // holiday visible when holidays is off
+
+    const fn = nonWorkingDay({ weekends: true, holidays: true, timeOff: true }, ['2026-11-23'], {
+      workingWeekdays: [1, 2, 3, 4, 5],
+      extraWorkdays: ['2026-11-21'],
+      extraNonWorkdays: ['2026-11-18']
+    })
+    expect(fn?.(date('2026-11-18'))).toBe(true) // Wednesday marked off
     expect(fn?.(date('2026-11-21'))).toBe(false) // Saturday explicitly worked
     expect(fn?.(date('2026-11-22'))).toBe(true) // Sunday still hidden
     expect(fn?.(date('2026-11-23'))).toBe(true) // Holiday still hidden

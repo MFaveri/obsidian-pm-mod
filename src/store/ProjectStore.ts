@@ -1297,6 +1297,10 @@ export class ProjectStore implements TaskSource {
       replacement.assignees = [...source.assignees]
       replacement.tags = [...source.tags]
       replacement.customFields = { ...source.customFields }
+      if (!replacement.baselineStart && !replacement.baselineDue && (source.baselineStart || source.baselineDue)) {
+        replacement.baselineStart = source.baselineStart
+        replacement.baselineDue = source.baselineDue
+      }
     }
     replacement.dependencies = replacementDependencies
     replacement.replaces = source.id
@@ -1355,6 +1359,53 @@ export class ProjectStore implements TaskSource {
       savedExternals.add(externalProject)
       await this.saveProject(externalProject)
     }
+  }
+
+  /** Captures each active dated task's current start/due as its schedule baseline. */
+  async captureBaseline(project: Project): Promise<number> {
+    const now = new Date().toISOString()
+    const dirtyIds: string[] = []
+    let count = 0
+
+    for (const { task } of flattenTasks(project.tasks)) {
+      if (task.archived || task.status === 'superseded') continue
+      const hasDate = !!(task.start || task.due)
+      const nextStart = hasDate ? (task.type === 'milestone' ? '' : task.start || task.due) : undefined
+      const nextDue = hasDate ? task.due || task.start : undefined
+      if (hasDate) count++
+      if (task.baselineStart !== nextStart || task.baselineDue !== nextDue) {
+        task.baselineStart = nextStart
+        task.baselineDue = nextDue
+        task.updatedAt = now
+        dirtyIds.push(task.id)
+      }
+    }
+
+    project.baselineAt = now
+    if (dirtyIds.length) this.markDirty(project, dirtyIds, 'fm')
+    await this.saveProject(project)
+    return count
+  }
+
+  /** Removes saved schedule baseline dates from the project and its tasks. */
+  async clearBaseline(project: Project): Promise<number> {
+    const now = new Date().toISOString()
+    const dirtyIds: string[] = []
+
+    for (const { task } of flattenTasks(project.tasks)) {
+      if (task.baselineStart !== undefined || task.baselineDue !== undefined) {
+        task.baselineStart = undefined
+        task.baselineDue = undefined
+        task.updatedAt = now
+        dirtyIds.push(task.id)
+      }
+    }
+
+    const hadMeta = project.baselineAt !== undefined
+    project.baselineAt = undefined
+    if (dirtyIds.length) this.markDirty(project, dirtyIds, 'fm')
+    if (dirtyIds.length || hadMeta) await this.saveProject(project)
+    return dirtyIds.length
   }
 
   /**
@@ -1957,7 +2008,8 @@ export class ProjectStore implements TaskSource {
         workdaysOnly: config.scheduleWorkdaysOnly,
         workingWeekdays: config.workingWeekdays,
         holidays: this.getSettings().holidays,
-        extraWorkdays: config.extraWorkdays
+        extraWorkdays: config.extraWorkdays,
+        extraNonWorkdays: config.extraNonWorkdays
       }
     )
     if (patches.length === 0) return []

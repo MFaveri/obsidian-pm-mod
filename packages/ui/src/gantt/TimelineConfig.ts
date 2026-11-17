@@ -47,20 +47,30 @@ export interface TimelineOptions {
   isHidden?: (date: Temporal.PlainDate) => boolean
   /** Width in pixels the shown days must at least fill; the range runs on past the last task until they do. */
   minWidth?: number
+  /** Include captured baseline dates when computing the timeline span. */
+  includeBaseline?: boolean
 }
 
-/** The days `days` leaves out: non-working weekdays and listed holidays, minus any explicit extra workdays. */
+/** The days `days` leaves out: non-working weekdays, holidays, and explicit extra non-working days, minus extra workdays. */
 export function nonWorkingDay(
   days: NonWorkingDays,
   holidays: readonly string[],
-  opts?: { workingWeekdays?: readonly number[]; extraWorkdays?: readonly string[] }
+  opts?: {
+    workingWeekdays?: readonly number[]
+    extraWorkdays?: readonly string[]
+    extraNonWorkdays?: readonly string[]
+  }
 ): ((date: Temporal.PlainDate) => boolean) | undefined {
-  if (!days.weekends && !(days.holidays && holidays.length)) return undefined
+  const extraOff = days.timeOff ? (opts?.extraNonWorkdays ?? []) : []
+  const hasHolidays = days.holidays === true && holidays.length > 0
+  if (!days.weekends && !hasHolidays && extraOff.length === 0) return undefined
   const off = new Set(days.holidays ? holidays : [])
+  const extraOffSet = new Set(extraOff)
   const extra = new Set(opts?.extraWorkdays ?? [])
   const weekdays = opts?.workingWeekdays ? new Set(opts.workingWeekdays) : null
   return (date) => {
     const iso = date.toString()
+    if (extraOffSet.has(iso)) return true
     if (extra.has(iso)) return false
     if (off.has(iso)) return true
     if (!days.weekends) return false
@@ -100,6 +110,12 @@ export function buildTimelineConfig(
     const due = parsePlainDate(t.due)
     if (start) dates.push(start)
     if (due) dates.push(due)
+    if (options.includeBaseline) {
+      const bStart = parsePlainDate(t.baselineStart ?? '')
+      const bDue = parsePlainDate(t.baselineDue ?? '')
+      if (bStart) dates.push(bStart)
+      if (bDue) dates.push(bDue)
+    }
   }
 
   const now = today()

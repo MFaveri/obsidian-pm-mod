@@ -44,6 +44,7 @@ export function resolveProjectConfig(
         ? [...settings.workingWeekdays]
         : [...DEFAULT_WORKING_WEEKDAYS],
     extraWorkdays: config?.extraWorkdays ? [...config.extraWorkdays] : [],
+    extraNonWorkdays: config?.extraNonWorkdays ? [...config.extraNonWorkdays] : [],
     autoArchiveDays: config?.autoArchiveDays ?? settings.autoArchiveDays,
     showSubtreeConnections: config?.showSubtreeConnections ?? settings.showSubtreeConnections,
     lineBorders: config?.lineBorders ?? settings.lineBorders

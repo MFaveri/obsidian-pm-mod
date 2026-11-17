@@ -620,6 +620,55 @@ describe('ProjectStore round-trip', () => {
     expect(source.replacedBy).toBeUndefined()
   })
 
+  it('captures and clears schedule baseline across tasks including nested subtasks', async () => {
+    const { store } = newStore()
+    const project = await store.createProject('Baseline', 'Projects')
+    const parent = makeTask({ title: 'Parent', start: '2026-11-10', due: '2026-11-15' })
+    const sub = makeTask({ title: 'Sub', type: 'subtask', start: '2026-11-10', due: '2026-11-12' })
+    const mile = makeTask({ title: 'Launch', type: 'milestone', start: '', due: '2026-11-20' })
+    const old = makeTask({ title: 'Old', start: '2026-11-01', due: '2026-11-02' })
+    await store.insertTask(project, parent)
+    await store.insertTask(project, sub, parent.id)
+    await store.insertTask(project, mile)
+    await store.insertTask(project, old)
+    await store.replaceTask(project, old.id, makeTask({ title: 'Replacement', start: '', due: '' }), {
+      duplicateSubtasks: false
+    })
+
+    const count = await store.captureBaseline(project)
+    expect(count).toBe(3)
+    expect(project.baselineAt).toBeTruthy()
+    expect(parent).toMatchObject({ baselineStart: '2026-11-10', baselineDue: '2026-11-15' })
+    expect(sub).toMatchObject({ baselineStart: '2026-11-10', baselineDue: '2026-11-12' })
+    expect(mile).toMatchObject({ baselineStart: '', baselineDue: '2026-11-20' })
+    expect(old.baselineStart).toBeUndefined()
+
+    const cleared = await store.clearBaseline(project)
+    expect(cleared).toBe(3)
+    expect(project.baselineAt).toBeUndefined()
+    expect(parent.baselineStart).toBeUndefined()
+    expect(sub.baselineDue).toBeUndefined()
+  })
+
+  it('carries baseline dates onto a new replacement task when replacing a baselined task', async () => {
+    const { store } = newStore()
+    const project = await store.createProject('Replace baseline', 'Projects')
+    const source = makeTask({
+      title: 'Original',
+      start: '2026-11-16',
+      due: '2026-11-20',
+      baselineStart: '2026-11-10',
+      baselineDue: '2026-11-14'
+    })
+    await store.insertTask(project, source)
+
+    const replacement = makeTask({ title: 'Replacement', start: '2026-11-16', due: '2026-11-20' })
+    await store.replaceTask(project, source.id, replacement, { duplicateSubtasks: false })
+
+    expect(replacement.baselineStart).toBe('2026-11-10')
+    expect(replacement.baselineDue).toBe('2026-11-14')
+  })
+
   it('migrates an old-format (embedded tasks) project on load and save', async () => {
     const { store, vault } = newStore()
     // Manually write an old-format project file (tasks embedded in frontmatter).
@@ -831,25 +880,29 @@ describe('ProjectStore pull-forward on early finish', () => {
     const project = await store.createProject('Special Saturday', 'Projects')
     project.config = {
       workingWeekdays: [1, 2, 3, 4, 5],
-      extraWorkdays: ['2026-11-21']
+      extraWorkdays: ['2026-11-21'],
+      extraNonWorkdays: ['2026-11-23']
     }
     const blocker = makeTask({ title: 'Friday work', start: '2026-11-19', due: '2026-11-20' })
     const dependent = makeTask({
       title: 'Saturday special',
       start: '2026-11-18',
-      due: '2026-11-18',
+      due: '2026-11-19',
       dependencies: [blocker.id]
     })
     await store.insertTask(project, blocker)
     await store.insertTask(project, dependent)
     await store.scheduleAfterChange(project, blocker.id)
+    // Sat 11-21 is an extra workday, Sun 11-22 is off, Mon 11-23 is PTO -> Tue 11-24.
     expect(dependent.start).toBe('2026-11-21')
+    expect(dependent.due).toBe('2026-11-24')
 
     const file = vault.getAbstractFileByPath(project.filePath)
     if (!(file instanceof TFile)) throw new Error('project file missing')
     const reloaded = expectDefined(await new ProjectStore(app as unknown as App, () => settings).loadProject(file))
     expect(reloaded.config?.workingWeekdays).toEqual([1, 2, 3, 4, 5])
     expect(reloaded.config?.extraWorkdays).toEqual(['2026-11-21'])
+    expect(reloaded.config?.extraNonWorkdays).toEqual(['2026-11-23'])
   })
 })
 

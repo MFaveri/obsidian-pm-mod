@@ -1,4 +1,4 @@
-import { ItemView, Menu, Platform, Scope, WorkspaceLeaf } from 'obsidian'
+import { ItemView, Menu, Notice, Platform, Scope, WorkspaceLeaf } from 'obsidian'
 import type PMPlugin from '#main'
 import { addTabPageItems, refreshTabTitle } from '#ui/tab'
 import {
@@ -14,6 +14,7 @@ import {
   type ViewMode,
   excludeSupersededTasks,
   flattenTasks,
+  formatDateShort,
   includesSupersededFilter,
   shownFields,
   withDefault,
@@ -97,7 +98,7 @@ import { TableView } from './table/TableView'
 import type { ExportViewState } from '../export/snapshot'
 import { GanttView } from './gantt/GanttView'
 import { KanbanView } from './KanbanView'
-import { openTaskModal } from '#ui/ModalFactory'
+import { confirmDialog, openTaskModal } from '#ui/ModalFactory'
 import { exportViewAsHtml } from '../export/exportView'
 import { collapsedGanttProjectPaths, collapsedTaskIds, setAllCollapsed } from './collapse'
 
@@ -133,7 +134,7 @@ const sortFields = (config?: ResolvedProjectConfig): SortField[] => [
 
 /** One of a mode's own controls, as the options slot, the Tune list and the More menu draw it. */
 interface ViewOption {
-  id: 'today' | 'scale' | 'days' | 'critical' | 'collapse'
+  id: 'today' | 'scale' | 'days' | 'critical' | 'baseline' | 'collapse'
   icon: string
   label: string
   /** The current value: the Tune list's faint state, and the chip's text when `chip` is `value`. */
@@ -164,6 +165,7 @@ export class ProjectView extends ItemView {
   fields: ViewFields = {}
   nonWorkingDays: NonWorkingDays = {}
   showCriticalPath = false
+  showBaseline = false
   /** Percent of the scale's day width. Kept per device, not in the view. */
   zoom = 100
   granularity: GanttGranularity
@@ -183,6 +185,7 @@ export class ProjectView extends ItemView {
   private zoomStepper: Stepper | null = null
   private daysButton: ChipButton | null = null
   private criticalButton: ChipButton | null = null
+  private baselineButton: ChipButton | null = null
   private keyScope: Scope
   private pendingRefresh: Promise<void> | null = null
   private initialized = false
@@ -404,6 +407,7 @@ export class ProjectView extends ItemView {
       this.granularity = saved.ganttGranularity
       this.nonWorkingDays = saved.nonWorkingDays
       this.showCriticalPath = saved.showCriticalPath === true
+      this.showBaseline = saved.showBaseline === true
       return
     }
     this.query.filter = makeDefaultFilter()
@@ -413,6 +417,7 @@ export class ProjectView extends ItemView {
     this.fields = structuredClone(this.plugin.settings.defaultFields)
     this.nonWorkingDays = {}
     this.showCriticalPath = false
+    this.showBaseline = false
     this.granularity = this.plugin.settings.ganttGranularity
     // A scope seen for the first time opens with its starred view, and keeps it from then on.
     const starred = this.savedViews().find((view) => view.isDefault)
@@ -431,6 +436,7 @@ export class ProjectView extends ItemView {
     if (view.ganttGranularity) this.granularity = view.ganttGranularity
     if (view.nonWorkingDays) this.nonWorkingDays = structuredClone(view.nonWorkingDays)
     if (view.showCriticalPath !== undefined) this.showCriticalPath = view.showCriticalPath
+    if (view.showBaseline !== undefined) this.showBaseline = view.showBaseline
     if (view.viewMode) this.currentView = view.viewMode
   }
 
@@ -450,7 +456,8 @@ export class ProjectView extends ItemView {
       mode: t('header.mode'),
       scale: t('header.scale'),
       days: t('header.changedDays'),
-      critical: t('header.changedCritical')
+      critical: t('header.changedCritical'),
+      baseline: t('header.changedBaseline')
     }
     const state = {
       filter: this.query.filter,
@@ -460,7 +467,8 @@ export class ProjectView extends ItemView {
       mode: this.currentView,
       granularity: this.granularity,
       nonWorkingDays: this.nonWorkingDays,
-      showCriticalPath: this.showCriticalPath
+      showCriticalPath: this.showCriticalPath,
+      showBaseline: this.showBaseline
     }
     return viewDifferences(active, state).map((part) => labels[part])
   }
@@ -475,7 +483,8 @@ export class ProjectView extends ItemView {
       fields: this.fields,
       ganttGranularity: this.granularity,
       nonWorkingDays: this.nonWorkingDays,
-      showCriticalPath: this.showCriticalPath
+      showCriticalPath: this.showCriticalPath,
+      showBaseline: this.showBaseline
     }
     await this.plugin.saveSettings()
   }
@@ -563,8 +572,11 @@ export class ProjectView extends ItemView {
         .setActive(this.fields[this.currentView] !== undefined)
     }
     this.zoomStepper?.setValue(`${this.zoom}%`, this.zoom <= MIN_ZOOM, this.zoom >= MAX_ZOOM)
-    this.daysButton?.setActive(!!this.nonWorkingDays.weekends || !!this.nonWorkingDays.holidays)
+    this.daysButton?.setActive(
+      !!this.nonWorkingDays.weekends || !!this.nonWorkingDays.holidays || !!this.nonWorkingDays.timeOff
+    )
     this.criticalButton?.setActive(this.showCriticalPath)
+    this.baselineButton?.setActive(this.showBaseline)
     if (this.sortButton) syncSortButton(this.sortButton, this.sortSummary())
     this.header?.fit()
   }
@@ -1158,6 +1170,7 @@ export class ProjectView extends ItemView {
     this.zoomStepper = null
     this.daysButton = null
     this.criticalButton = null
+    this.baselineButton = null
     for (const option of this.viewOptions(scope)) {
       if (option === 'zoom') {
         this.zoomStepper = new Stepper(parent, this.zoomProps())
@@ -1170,6 +1183,7 @@ export class ProjectView extends ItemView {
       chip.onClick(() => option.run(chip.el))
       if (option.id === 'days') this.daysButton = chip
       if (option.id === 'critical') this.criticalButton = chip
+      if (option.id === 'baseline') this.baselineButton = chip
     }
   }
 
@@ -1209,8 +1223,15 @@ export class ProjectView extends ItemView {
           id: 'critical',
           icon: 'route',
           label: t('gantt.criticalPath'),
-          chip: 'icon',
+          chip: 'label',
           run: () => this.toggleCriticalPath()
+        },
+        {
+          id: 'baseline',
+          icon: 'history',
+          label: t('gantt.baseline'),
+          chip: 'label',
+          run: (anchor) => this.openBaselineMenu(anchor, scope)
         }
       )
     }
@@ -1240,6 +1261,89 @@ export class ProjectView extends ItemView {
     this.syncHeader()
     this.renderCurrentView()
     void this.persistFilter()
+  }
+
+  private openBaselineMenu(anchor: HTMLElement, scope: ProjectScope): void {
+    const hasBaseline = scope.projects.some(
+      (p) => !!p.baselineAt || flattenTasks(p.tasks).some((ft) => !!ft.task.baselineStart || !!ft.task.baselineDue)
+    )
+    const latestTs = scope.projects
+      .map((p) => p.baselineAt)
+      .filter((ts): ts is string => !!ts)
+      .sort()
+      .pop()
+    const savedLabel = latestTs ? formatDateShort(latestTs.slice(0, 10)) : ''
+
+    const menu = new Menu()
+    menu.addItem((item) =>
+      item
+        .setTitle(t('gantt.baselineShow'))
+        .setIcon('eye')
+        .setChecked(this.showBaseline)
+        .onClick(() => {
+          this.showBaseline = !this.showBaseline
+          if (this.showBaseline && !hasBaseline) new Notice(t('gantt.baselineNone'))
+          this.syncHeader()
+          this.renderCurrentView()
+          void this.persistFilter()
+        })
+    )
+    if (savedLabel) {
+      menu.addItem((item) =>
+        item
+          .setTitle(t('gantt.baselineSavedAt', { date: savedLabel }))
+          .setIcon('clock')
+          .setDisabled(true)
+      )
+    }
+    menu.addSeparator()
+    menu.addItem((item) =>
+      item
+        .setTitle(t('gantt.baselineCaptureAction'))
+        .setIcon('bookmark-check')
+        .onClick(
+          safeAsync(async () => {
+            if (hasBaseline) {
+              const ok = await confirmDialog(
+                this.app,
+                t('gantt.baselineCaptureConfirm', { date: savedLabel || '—' })
+              )
+              if (!ok) return
+            }
+            let count = 0
+            for (const project of scope.projects) {
+              count += await this.plugin.store.captureBaseline(project)
+            }
+            this.showBaseline = true
+            this.syncHeader()
+            this.renderCurrentView()
+            void this.persistFilter()
+            new Notice(t('gantt.baselineCaptured', { count }))
+          })
+        )
+    )
+    if (hasBaseline) {
+      menu.addItem((item) =>
+        item
+          .setTitle(t('gantt.baselineClearAction'))
+          .setIcon('trash-2')
+          .onClick(
+            safeAsync(async () => {
+              const ok = await confirmDialog(this.app, t('gantt.baselineClearConfirm'))
+              if (!ok) return
+              for (const project of scope.projects) {
+                await this.plugin.store.clearBaseline(project)
+              }
+              this.showBaseline = false
+              this.syncHeader()
+              this.renderCurrentView()
+              void this.persistFilter()
+              new Notice(t('gantt.baselineCleared'))
+            })
+          )
+      )
+    }
+    showMenuBelow(menu, anchor)
   }
 
   private openScaleMenu(anchor: HTMLElement): void {
@@ -1442,6 +1546,7 @@ export class ProjectView extends ItemView {
       ganttGranularity: this.granularity,
       nonWorkingDays: structuredClone(this.nonWorkingDays),
       showCriticalPath: this.showCriticalPath,
+      showBaseline: this.showBaseline,
       ...(isDefault ? { isDefault: true } : {})
     }
     this.activeSavedViewId = sv.id
@@ -1463,6 +1568,7 @@ export class ProjectView extends ItemView {
     sv.ganttGranularity = this.granularity
     sv.nonWorkingDays = structuredClone(this.nonWorkingDays)
     sv.showCriticalPath = this.showCriticalPath
+    sv.showBaseline = this.showBaseline
     this.activeSavedViewId = sv.id
     await this.persistSavedViews(views)
     void this.persistFilter()
@@ -1583,6 +1689,7 @@ export class ProjectView extends ItemView {
           this.zoom,
           this.nonWorkingDays,
           this.showCriticalPath,
+          this.showBaseline,
           (zoom) => {
             this.zoom = zoom
             this.rememberZoom()

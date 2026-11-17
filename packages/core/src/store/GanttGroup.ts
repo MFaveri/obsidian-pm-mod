@@ -8,6 +8,8 @@ import { flattenTasks } from './TaskTreeOps'
 export interface ProjectSpanSummary {
   start: string
   due: string
+  baselineStart?: string
+  baselineDue?: string
   done: number
   total: number
   progress: number
@@ -50,6 +52,8 @@ export interface BuildGanttRowsOptions<P extends GanttGroupProject> {
 export function summarizeProjectSpan(tasks: Task[], statuses: StatusConfig[]): ProjectSpanSummary {
   let minDate: Temporal.PlainDate | null = null
   let maxDate: Temporal.PlainDate | null = null
+  let minBase: Temporal.PlainDate | null = null
+  let maxBase: Temporal.PlainDate | null = null
   let done = 0
   let total = 0
 
@@ -66,11 +70,23 @@ export function summarizeProjectSpan(tasks: Task[], statuses: StatusConfig[]): P
     if (dueDate && (!maxDate || Temporal.PlainDate.compare(dueDate, maxDate) > 0)) {
       maxDate = dueDate
     }
+
+    const baseStart = parsePlainDate(task.baselineStart ?? '') ?? parsePlainDate(task.baselineDue ?? '')
+    if (baseStart && (!minBase || Temporal.PlainDate.compare(baseStart, minBase) < 0)) {
+      minBase = baseStart
+    }
+
+    const baseDue = parsePlainDate(task.baselineDue ?? '') ?? parsePlainDate(task.baselineStart ?? '')
+    if (baseDue && (!maxBase || Temporal.PlainDate.compare(baseDue, maxBase) > 0)) {
+      maxBase = baseDue
+    }
   }
 
   return {
     start: minDate ? minDate.toString() : '',
     due: maxDate ? maxDate.toString() : '',
+    ...(minBase ? { baselineStart: minBase.toString() } : {}),
+    ...(maxBase ? { baselineDue: maxBase.toString() } : {}),
     done,
     total,
     progress: total > 0 ? Math.round((done / total) * 100) : 0

@@ -30,6 +30,7 @@ const CONFIG = {
   scheduleWorkdaysOnly: false,
   workingWeekdays: [1, 2, 3, 4, 5],
   extraWorkdays: [],
+  extraNonWorkdays: [],
   autoArchiveDays: 0,
   showSubtreeConnections: true,
   lineBorders: 'none' as const

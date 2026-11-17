@@ -364,3 +364,52 @@
   stroke-width: 2;
   opacity: 1;
 }
+
+.pm-gantt-baseline-bar {
+  fill: var(--text-muted);
+  opacity: 0.45;
+}
+.pm-gantt-baseline-bar--late {
+  fill: var(--color-orange, var(--color-red));
+  opacity: 0.6;
+}
+.pm-gantt-baseline-bar--ahead {
+  fill: var(--color-green);
+  opacity: 0.55;
+}
+
+.pm-gantt-baseline-milestone {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 2;
+  opacity: 0.75;
+}
+.pm-gantt-baseline-milestone--late {
+  stroke: var(--color-orange, var(--color-red));
+}
+.pm-gantt-baseline-milestone--ahead {
+  stroke: var(--color-green);
+}
+
+.pm-gantt-tooltip {
+  position: absolute;
+  z-index: 40;
+  pointer-events: none;
+  max-width: 320px;
+  padding: 8px 10px;
+  border-radius: var(--radius-m);
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: var(--shadow-s);
+  color: var(--text-normal);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.pm-gantt-tooltip-title {
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+.pm-gantt-tooltip-line {
+  color: var(--text-muted);
+}

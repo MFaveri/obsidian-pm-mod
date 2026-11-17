@@ -129,3 +129,63 @@ describe('drawDependencyArrows with explicit row indices', () => {
     expect(canvas.svgEl.querySelector('#pm-arrowhead-critical')).not.toBeNull()
   })
 })
+
+describe('baseline drawing', () => {
+  it('draws baseline track under slipped bars and ghost diamond for milestones', () => {
+    const task = makeTask({
+      id: 't1',
+      title: 'T1',
+      start: '2026-04-03',
+      due: '2026-04-06',
+      baselineStart: '2026-04-01',
+      baselineDue: '2026-04-04'
+    })
+    const mile = makeTask({
+      id: 'm1',
+      type: 'milestone',
+      start: '',
+      due: '2026-04-05',
+      baselineDue: '2026-04-07'
+    })
+    const canvas = makeCanvas([task, mile])
+    const barsG = svgEl('g', {})
+    canvas.svgEl.appendChild(barsG)
+
+    const bar = drawTaskBar(barsG, canvas, DEFAULT_STATUSES, task, 0, '#3b82f6', '', undefined, {
+      baselineStart: '2026-04-01',
+      baselineDue: '2026-04-04',
+      startDeltaDays: 2,
+      dueDeltaDays: 2,
+      showBar: true
+    })
+    drawMilestoneDiamond(barsG, canvas, mile, 1, '#f59e0b', undefined, {
+      baselineStart: '2026-04-07',
+      baselineDue: '2026-04-07',
+      startDeltaDays: -2,
+      dueDeltaDays: -2,
+      showBar: true
+    })
+    drawSummaryBar(
+      barsG,
+      canvas,
+      {
+        title: 'P',
+        color: '#3b82f6',
+        start: '2026-04-03',
+        due: '2026-04-06',
+        baselineStart: '2026-04-01',
+        baselineDue: '2026-04-04',
+        progress: 20,
+        done: 0,
+        total: 1
+      },
+      2,
+      true
+    )
+
+    expect(bar?.barGroup.querySelector('.pm-gantt-baseline-bar--late')).not.toBeNull()
+    expect(bar?.rect.querySelector('title')?.textContent).toContain('+2d')
+    expect(barsG.querySelector('.pm-gantt-baseline-milestone--ahead')).not.toBeNull()
+    expect(barsG.querySelectorAll('.pm-gantt-baseline-bar')).toHaveLength(2)
+  })
+})

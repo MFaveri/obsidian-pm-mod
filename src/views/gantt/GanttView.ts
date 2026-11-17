@@ -95,6 +95,7 @@ export class GanttView implements SubView {
     private zoom: number,
     private nonWorkingDays: NonWorkingDays,
     private showCriticalPath: boolean,
+    private showBaseline: boolean,
     /** Ctrl+scroll changed the zoom. */
     private onZoom: (zoom: number) => void
   ) {}
@@ -171,6 +172,7 @@ export class GanttView implements SubView {
     })
     this.rows = rows
     const extraWorkdays = this.scope.projects.flatMap((p) => this.plugin.store.configFor(p).extraWorkdays)
+    const extraNonWorkdays = this.scope.projects.flatMap((p) => this.plugin.store.configFor(p).extraNonWorkdays)
     const primaryCfg = !this.scope.isMulti && this.scope.primary
       ? this.plugin.store.configFor(this.scope.primary)
       : null
@@ -186,6 +188,7 @@ export class GanttView implements SubView {
         workingWeekdays: workingWeekdays ?? this.plugin.settings.workingWeekdays,
         holidays: this.plugin.settings.holidays,
         extraWorkdays,
+        extraNonWorkdays,
         pullForward: primaryCfg
           ? primaryCfg.pullForwardOnEarlyFinish
           : this.scope.projects.some((p) => this.plugin.store.configFor(p).pullForwardOnEarlyFinish)
@@ -193,8 +196,13 @@ export class GanttView implements SubView {
     )
     this.cfg = buildTimelineConfig(timelineTasks, this.granularity, {
       zoom: this.zoom,
-      isHidden: nonWorkingDay(this.nonWorkingDays, this.plugin.settings.holidays, { workingWeekdays, extraWorkdays }),
-      minWidth: this.container.clientWidth - this.labelWidth
+      isHidden: nonWorkingDay(this.nonWorkingDays, this.plugin.settings.holidays, {
+        workingWeekdays,
+        extraWorkdays,
+        extraNonWorkdays
+      }),
+      minWidth: this.container.clientWidth - this.labelWidth,
+      includeBaseline: this.showBaseline
     })
 
     this.renderGantt()
@@ -334,6 +342,7 @@ export class GanttView implements SubView {
     this.renderTaskRows(leftBody, ctx)
     renderDependencyArrows(ctx)
     renderMilestoneLabels(ctx)
+    this.attachHoverTooltip(wrapper)
 
     // The left panel is overflow:hidden, so its wheel events would be swallowed.
     const onLeftWheel = (e: WheelEvent) => {
@@ -409,7 +418,8 @@ export class GanttView implements SubView {
             color: item.project.color,
             ...item.summary
           },
-          item.rowIndex
+          item.rowIndex,
+          this.showBaseline
         )
       } else {
         renderTaskLabel(leftBody, item.task, item.depth, item.rowIndex, labelCtx)
@@ -439,6 +449,17 @@ export class GanttView implements SubView {
       totalRows: this.rows.length,
       criticalPath: this.criticalPath,
       showCriticalPath: this.showCriticalPath,
+      showBaseline: this.showBaseline,
+      scheduleOptionsOf: (taskId: string) => {
+        const cfg = this.scope.configOf(taskId)
+        return {
+          workdaysOnly: cfg.scheduleWorkdaysOnly,
+          workingWeekdays: cfg.workingWeekdays,
+          holidays: this.plugin.settings.holidays,
+          extraWorkdays: cfg.extraWorkdays,
+          extraNonWorkdays: cfg.extraNonWorkdays
+        }
+      },
       drag: this.drag,
       link: this.link,
       onRefresh: this.onRefresh,
@@ -451,5 +472,78 @@ export class GanttView implements SubView {
     const x = dateToX(this.cfg, today())
     const center = x - this.scrollEl.clientWidth / 2
     this.scrollEl.scrollLeft = Math.max(0, center)
+  }
+
+  private attachHoverTooltip(wrapper: HTMLElement): void {
+    const tooltips = new WeakMap<Element, string>()
+    for (const target of Array.from(
+      this.svgEl.querySelectorAll('.pm-gantt-bar-group, .pm-gantt-milestone, .pm-gantt-summary-group')
+    )) {
+      const titleEl = target.querySelector('title')
+      const text = titleEl?.textContent?.trim()
+      if (!text) continue
+      tooltips.set(target, text)
+      titleEl?.remove()
+    }
+
+    const tooltipEl = wrapper.createDiv('pm-gantt-tooltip pm-hidden')
+    let currentTarget: Element | null = null
+
+    const hide = (): void => {
+      currentTarget = null
+      tooltipEl.addClass('pm-hidden')
+    }
+
+    const position = (e: MouseEvent): void => {
+      const rect = wrapper.getBoundingClientRect()
+      const pad = 12
+      let x = e.clientX - rect.left + pad
+      let y = e.clientY - rect.top + pad
+      const maxX = Math.max(8, rect.width - tooltipEl.offsetWidth - 8)
+      const maxY = Math.max(8, rect.height - tooltipEl.offsetHeight - 8)
+      if (x > maxX) x = Math.max(8, e.clientX - rect.left - tooltipEl.offsetWidth - pad)
+      if (y > maxY) y = Math.max(8, e.clientY - rect.top - tooltipEl.offsetHeight - pad)
+      tooltipEl.style.left = `${x}px`
+      tooltipEl.style.top = `${y}px`
+    }
+
+    const onMove = (e: MouseEvent): void => {
+      if (this.drag.isDragging || this.link.active) {
+        hide()
+        return
+      }
+      const hit = (e.target as Element | null)?.closest(
+        '.pm-gantt-bar-group, .pm-gantt-milestone, .pm-gantt-summary-group'
+      )
+      const text = hit ? tooltips.get(hit) : undefined
+      if (!hit || !text) {
+        hide()
+        return
+      }
+      if (currentTarget !== hit) {
+        currentTarget = hit
+        tooltipEl.empty()
+        const lines = text.split('\n')
+        lines.forEach((line, idx) => {
+          tooltipEl.createDiv({
+            text: line,
+            cls: idx === 0 ? 'pm-gantt-tooltip-title' : 'pm-gantt-tooltip-line'
+          })
+        })
+        tooltipEl.removeClass('pm-hidden')
+      }
+      position(e)
+    }
+
+    this.svgEl.addEventListener('mousemove', onMove)
+    this.svgEl.addEventListener('mouseleave', hide)
+    this.svgEl.addEventListener('mousedown', hide)
+    this.scrollEl.addEventListener('scroll', hide)
+    this.cleanupFns.push(() => {
+      this.svgEl.removeEventListener('mousemove', onMove)
+      this.svgEl.removeEventListener('mouseleave', hide)
+      this.svgEl.removeEventListener('mousedown', hide)
+      this.scrollEl.removeEventListener('scroll', hide)
+    })
   }
 }

@@ -416,7 +416,20 @@ export class ProjectEditView extends ItemView {
       { value: false, label: t('common.off') }
     ])
     this.renderWorkingWeekdaysRow(props, project)
-    this.renderExtraWorkdaysRow(props, project)
+    this.renderDateOverridesRow(props, project, {
+      key: 'extraWorkdays',
+      oppositeKey: 'extraNonWorkdays',
+      label: t('projectEdit.extraWorkdays'),
+      addLabel: t('projectEdit.extraWorkdaysAdd'),
+      hint: t('projectEdit.extraWorkdaysHint')
+    })
+    this.renderDateOverridesRow(props, project, {
+      key: 'extraNonWorkdays',
+      oppositeKey: 'extraWorkdays',
+      label: t('projectEdit.extraNonWorkdays'),
+      addLabel: t('projectEdit.extraNonWorkdaysAdd'),
+      hint: t('projectEdit.extraNonWorkdaysHint')
+    })
     row(t('settings.autoArchiveDays.name'), 'autoArchiveDays', [
       { value: 0, label: t('projectEdit.never') },
       ...[7, 14, 30, 90].map((days) => ({ value: days, label: tn('projectEdit.afterDays', days) }))
@@ -479,23 +492,40 @@ export class ProjectEditView extends ItemView {
     })
   }
 
-  private renderExtraWorkdaysRow(props: HTMLElement, project: Project): void {
-    renderPropRow(props, t('projectEdit.extraWorkdays'), () => {
+  private renderDateOverridesRow(
+    props: HTMLElement,
+    project: Project,
+    spec: {
+      key: 'extraWorkdays' | 'extraNonWorkdays'
+      oppositeKey: 'extraWorkdays' | 'extraNonWorkdays'
+      label: string
+      addLabel: string
+      hint: string
+    }
+  ): void {
+    renderPropRow(props, spec.label, () => {
       const cell = createDiv('pm-prop-value pm-extra-workdays')
       const controls = cell.createDiv('pm-extra-workdays-controls')
       const input = controls.createEl('input', { type: 'date', cls: 'pm-input pm-extra-workdays-input' })
-      const addBtn = new ButtonComponent(controls).setButtonText(t('projectEdit.extraWorkdaysAdd'))
+      const addBtn = new ButtonComponent(controls).setButtonText(spec.addLabel)
       addBtn.onClick(() => {
         const iso = input.value.trim()
         if (!iso || !parsePlainDate(iso)) return
-        const current = project.config?.extraWorkdays ?? []
+        const opposite = project.config?.[spec.oppositeKey] ?? []
+        if (opposite.includes(iso)) {
+          const pruned = opposite.filter((d) => d !== iso)
+          this.patchConfig(spec.oppositeKey, pruned.length ? pruned : undefined)
+        }
+        const current = project.config?.[spec.key] ?? []
         if (!current.includes(iso)) {
-          this.patchConfig('extraWorkdays', [...current, iso].sort())
+          this.patchConfig(spec.key, [...current, iso].sort())
+          this.render()
+        } else if (opposite.includes(iso)) {
           this.render()
         }
       })
 
-      const dates = project.config?.extraWorkdays ?? []
+      const dates = project.config?.[spec.key] ?? []
       if (dates.length) {
         const list = cell.createDiv('pm-extra-workdays-list')
         for (const iso of dates) {
@@ -506,12 +536,12 @@ export class ProjectEditView extends ItemView {
             .setTooltip(t('common.remove'))
             .onClick(() => {
               const next = dates.filter((d) => d !== iso)
-              this.patchConfig('extraWorkdays', next.length ? next : undefined)
+              this.patchConfig(spec.key, next.length ? next : undefined)
               this.render()
             })
         }
       } else {
-        cell.createDiv({ cls: 'pm-modal-hint', text: t('projectEdit.extraWorkdaysHint') })
+        cell.createDiv({ cls: 'pm-modal-hint', text: spec.hint })
       }
       return cell
     })

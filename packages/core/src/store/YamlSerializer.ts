@@ -26,6 +26,7 @@ export const PROJECT_FRONTMATTER_KEYS: ReadonlySet<string> = new Set([
   'customFields',
   'teamMembers',
   'savedViews',
+  'baselineAt',
   'createdAt',
   'updatedAt',
   'config',
@@ -44,6 +45,8 @@ export const TASK_FRONTMATTER_KEYS: ReadonlySet<string> = new Set([
   'priority',
   'start',
   'due',
+  'baselineStart',
+  'baselineDue',
   'progress',
   'assignees',
   'tags',
@@ -92,6 +95,7 @@ function serializeProjectConfig(config: ProjectConfig | undefined): Record<strin
   if (config.scheduleWorkdaysOnly !== undefined) out.scheduleWorkdaysOnly = config.scheduleWorkdaysOnly
   if (config.workingWeekdays?.length) out.workingWeekdays = config.workingWeekdays
   if (config.extraWorkdays?.length) out.extraWorkdays = config.extraWorkdays
+  if (config.extraNonWorkdays?.length) out.extraNonWorkdays = config.extraNonWorkdays
   if (config.autoArchiveDays !== undefined) out.autoArchiveDays = config.autoArchiveDays
   if (config.showSubtreeConnections !== undefined) out.showSubtreeConnections = config.showSubtreeConnections
   if (config.lineBorders) out.lineBorders = config.lineBorders
@@ -125,6 +129,7 @@ export function serializeProject(
     customFields: project.customFields,
     teamMembers: project.teamMembers,
     savedViews: project.savedViews.length ? project.savedViews : [],
+    ...(project.baselineAt ? { baselineAt: project.baselineAt } : {}),
     createdAt: project.createdAt,
     updatedAt: project.updatedAt
   }
@@ -181,6 +186,8 @@ export function buildTaskFrontmatter(
     createdAt: task.createdAt,
     updatedAt: task.updatedAt
   }
+  if (task.baselineStart) fm.baselineStart = task.baselineStart
+  if (task.baselineDue) fm.baselineDue = task.baselineDue
   if (task.completed) fm.completed = task.completed
   if (task.replacedBy) fm.replacedBy = refs.dependency(task.replacedBy) ?? task.replacedBy
   if (task.replaces) fm.replaces = refs.dependency(task.replaces) ?? task.replaces

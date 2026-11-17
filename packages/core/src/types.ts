@@ -67,6 +67,8 @@ export interface Task {
   priority: TaskPriority
   start: string // YYYY-MM-DD, empty string = unset
   due: string // YYYY-MM-DD, empty string = unset
+  baselineStart?: string // YYYY-MM-DD, captured schedule baseline start
+  baselineDue?: string // YYYY-MM-DD, captured schedule baseline due
   progress: number // 0-100
   completed: string // YYYY-MM-DD, empty string = not completed; stamped when status becomes complete
   assignees: string[]
@@ -98,6 +100,8 @@ export interface Project {
   updatedAt: string
   filePath: string // resolved vault path
   savedViews: SavedView[]
+  /** ISO timestamp when the project's baseline was last captured. */
+  baselineAt?: string
   /** The project this one sits under, resolved from its `parent` link. */
   parentPath?: string
   /** Kept out of lists, pickers and sweeps. Sub-projects follow their parent. */
@@ -119,6 +123,7 @@ export type ProjectPatch = Partial<
     | 'customFields'
     | 'teamMembers'
     | 'savedViews'
+    | 'baselineAt'
     | 'config'
     | 'parentPath'
     | 'archived'
@@ -245,6 +250,7 @@ export interface ProjectListView {
 export interface NonWorkingDays {
   weekends?: boolean
   holidays?: boolean
+  timeOff?: boolean
 }
 
 export interface SavedView {
@@ -259,6 +265,7 @@ export interface SavedView {
   ganttGranularity?: GanttGranularity
   nonWorkingDays?: NonWorkingDays
   showCriticalPath?: boolean
+  showBaseline?: boolean
   /** The view a scope opens with. At most one per scope. */
   isDefault?: boolean
 }
@@ -276,6 +283,7 @@ export interface PerProjectFilter {
   ganttGranularity: GanttGranularity
   nonWorkingDays: NonWorkingDays
   showCriticalPath?: boolean
+  showBaseline?: boolean
 }
 
 export interface StatusConfig {
@@ -301,6 +309,8 @@ export interface ProjectConfig {
   workingWeekdays?: number[]
   /** Specific YYYY-MM-DD dates treated as working days one by one, overriding weekends/holidays. */
   extraWorkdays?: string[]
+  /** Specific YYYY-MM-DD dates treated as non-working days one by one (e.g. PTO or vacations). */
+  extraNonWorkdays?: string[]
   autoArchiveDays?: number
   showSubtreeConnections?: boolean
   lineBorders?: LineBorders
@@ -321,6 +331,7 @@ export interface ResolvedProjectConfig {
   scheduleWorkdaysOnly: boolean
   workingWeekdays: number[]
   extraWorkdays: string[]
+  extraNonWorkdays: string[]
   autoArchiveDays: number
   showSubtreeConnections: boolean
   lineBorders: LineBorders

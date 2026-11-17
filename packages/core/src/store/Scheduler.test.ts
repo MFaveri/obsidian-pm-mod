@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_STATUSES, makeTask, type StatusConfig, type Task } from '../types'
-import { addDays, computeCriticalPath, computeSchedule, daysBetween, wouldCreateCycle } from './Scheduler'
+import {
+  addDays,
+  computeBaselineVariance,
+  computeCriticalPath,
+  computeSchedule,
+  daysBetween,
+  wouldCreateCycle
+} from './Scheduler'
 
 function task(overrides: Partial<Task> & { id: string }): Task {
   return makeTask({
@@ -387,6 +394,20 @@ describe('computeSchedule with workdaysOnly and holidays', () => {
     ])
   })
 
+  it('skips specific extraNonWorkdays (such as PTO/vacation) when scheduling dependents', () => {
+    // Wed 2026-11-18 and Thu 2026-11-19 are marked non-working days one by one.
+    const tasks = [
+      task({ id: 'a', start: '2026-11-16', due: '2026-11-17' }),
+      task({ id: 'b', start: '2026-11-16', due: '2026-11-17', dependencies: ['a'] })
+    ]
+    const result = computeSchedule(tasks, undefined, statuses, false, [], {
+      workdaysOnly: true,
+      extraNonWorkdays: ['2026-11-18', '2026-11-19']
+    })
+    // A 2-day task skips Wed 11-18 and Thu 11-19 -> Fri 11-20 and Mon 11-23.
+    expect(result.patches).toEqual([{ taskId: 'b', start: '2026-11-20', due: '2026-11-23' }])
+  })
+
   it('uses start date as fallback end when a predecessor only has a start date', () => {
     const tasks = [
       task({ id: 'a', start: '2026-04-06', due: '' }),
@@ -510,5 +531,48 @@ describe('computeCriticalPath', () => {
     ], statuses)
     expect(cyclic.cycles).toEqual([['x', 'y']])
     expect(cyclic.criticalTaskIds).toEqual([])
+  })
+})
+
+describe('computeBaselineVariance', () => {
+  it('returns null when the task has no baseline dates', () => {
+    expect(computeBaselineVariance(task({ id: 'a', start: '2026-11-16', due: '2026-11-20' }))).toBeNull()
+  })
+
+  it('calculates positive slip and negative ahead variance in working or calendar days', () => {
+    const slipped = task({
+      id: 'a',
+      baselineStart: '2026-11-16',
+      baselineDue: '2026-11-20',
+      start: '2026-11-18',
+      due: '2026-11-24'
+    })
+    // Calendar days: start +2, due +4
+    expect(computeBaselineVariance(slipped)).toEqual({
+      baselineStart: '2026-11-16',
+      baselineDue: '2026-11-20',
+      startDeltaDays: 2,
+      dueDeltaDays: 4
+    })
+    // Working days (Mon-Fri): 11-20 (Fri) -> 11-24 (Tue) = 2 working days
+    expect(computeBaselineVariance(slipped, { workdaysOnly: true })).toEqual({
+      baselineStart: '2026-11-16',
+      baselineDue: '2026-11-20',
+      startDeltaDays: 2,
+      dueDeltaDays: 2
+    })
+
+    const ahead = task({
+      id: 'b',
+      type: 'milestone',
+      baselineDue: '2026-11-20',
+      due: '2026-11-18'
+    })
+    expect(computeBaselineVariance(ahead)).toEqual({
+      baselineStart: '2026-11-20',
+      baselineDue: '2026-11-20',
+      startDeltaDays: -2,
+      dueDeltaDays: -2
+    })
   })
 })

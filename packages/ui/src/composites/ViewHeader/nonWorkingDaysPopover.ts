@@ -20,12 +20,13 @@ export function renderNonWorkingDaysPanel(parent: HTMLElement, props: NonWorking
   let holidays = [...props.holidays]
   let list: HTMLElement
 
-  const toggle = (key: keyof NonWorkingDays, label: string): void => {
+  const toggle = (key: keyof NonWorkingDays, label: string, onUpdate: () => void): Checkbox => {
     const row = body.createEl('label', { cls: 'pm-group-row' })
     row.createSpan({ cls: 'pm-group-label', text: label })
-    new Checkbox(row).setChecked(!!days[key]).onChange((checked) => {
+    return new Checkbox(row).setChecked(!!days[key]).onChange((checked) => {
       if (checked) days[key] = true
       else Reflect.deleteProperty(days, key)
+      onUpdate()
       props.onChange()
     })
   }
@@ -38,8 +39,28 @@ export function renderNonWorkingDaysPanel(parent: HTMLElement, props: NonWorking
 
   const render = (): void => {
     body.empty()
-    toggle('weekends', t('timeline.hideWeekends'))
-    toggle('holidays', t('timeline.hideHolidays'))
+    const syncAll = (): void => {
+      const count = Number(!!days.weekends) + Number(!!days.holidays) + Number(!!days.timeOff)
+      allBox.setChecked(count === 3).setIndeterminate(count > 0 && count < 3)
+    }
+    const weekendBox = toggle('weekends', t('timeline.hideWeekends'), syncAll)
+    const holidayBox = toggle('holidays', t('timeline.hideHolidays'), syncAll)
+    const timeOffBox = toggle('timeOff', t('timeline.hideTimeOff'), syncAll)
+    const allRow = body.createEl('label', { cls: 'pm-group-row pm-days-all' })
+    allRow.createSpan({ cls: 'pm-group-label', text: t('timeline.hideAllNonWorking') })
+    const allBox = new Checkbox(allRow).onChange((checked) => {
+      for (const [key, box] of [
+        ['weekends', weekendBox],
+        ['holidays', holidayBox],
+        ['timeOff', timeOffBox]
+      ] as const) {
+        if (checked) days[key] = true
+        else Reflect.deleteProperty(days, key)
+        box.setChecked(checked)
+      }
+      props.onChange()
+    })
+    syncAll()
     list = body.createDiv('pm-days-list')
     renderList()
     body.createDiv({ cls: 'pm-days-note', text: t('timeline.holidaysNote') })

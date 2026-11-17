@@ -390,22 +390,45 @@ describe('project round-trip', () => {
 
   it('reads saved non-working days and drops anything but true', () => {
     const fm = {
-      savedViews: [{ id: 'v1', name: 'D', nonWorkingDays: { weekends: true, holidays: 'yes', fridays: true } }]
+      savedViews: [{ id: 'v1', name: 'D', nonWorkingDays: { weekends: true, holidays: 'yes', timeOff: true, fridays: true } }]
     }
     const project = hydrateProjectFromFrontmatter(fm, '', 'Projects/P.md', 'P')
-    expect(project.savedViews[0].nonWorkingDays).toEqual({ weekends: true })
+    expect(project.savedViews[0].nonWorkingDays).toEqual({ weekends: true, timeOff: true })
   })
 
   it('reads saved showCriticalPath booleans and ignores non-boolean values', () => {
     const fm = {
       savedViews: [
-        { id: 'v1', name: 'Crit', showCriticalPath: true },
-        { id: 'v2', name: 'Bad', showCriticalPath: 'yes' }
+        { id: 'v1', name: 'Crit', showCriticalPath: true, showBaseline: true },
+        { id: 'v2', name: 'Bad', showCriticalPath: 'yes', showBaseline: 'no' }
       ]
     }
     const project = hydrateProjectFromFrontmatter(fm, '', 'Projects/P.md', 'P')
     expect(project.savedViews[0].showCriticalPath).toBe(true)
+    expect(project.savedViews[0].showBaseline).toBe(true)
     expect(project.savedViews[1].showCriticalPath).toBeUndefined()
+    expect(project.savedViews[1].showBaseline).toBeUndefined()
+  })
+
+  it('round-trips baselineAt on project and baselineStart/baselineDue on tasks', () => {
+    const p = makeProject('Baseline', 'Projects/Baseline.md')
+    p.baselineAt = '2026-11-17T15:00:00.000Z'
+    const { project } = roundTripProject(p)
+    expect(project.baselineAt).toBe('2026-11-17T15:00:00.000Z')
+
+    const { task } = roundTripTask(
+      makeTask({
+        id: 't1',
+        title: 'Task',
+        start: '2026-11-18',
+        due: '2026-11-22',
+        baselineStart: '2026-11-16',
+        baselineDue: '2026-11-20'
+      }),
+      p
+    )
+    expect(task.baselineStart).toBe('2026-11-16')
+    expect(task.baselineDue).toBe('2026-11-20')
   })
 
   it('drops a timeline scale it does not know', () => {

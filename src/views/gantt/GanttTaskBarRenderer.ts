@@ -1,6 +1,7 @@
 import { Notice } from 'obsidian'
-import { DependencyBlockedError, ReplacementRequiredError, type Task, t } from '@dotpm/core'
+import { DependencyBlockedError, ReplacementRequiredError, type Task, computeBaselineVariance, t } from '@dotpm/core'
 import {
+  type BarBaselineInfo,
   type BarCriticalInfo,
   svgEl,
   safeAsync,
@@ -34,6 +35,15 @@ function criticalInfoFor(task: Task, ctx: RendererContext): BarCriticalInfo | un
   }
 }
 
+function baselineInfoFor(task: Task, ctx: RendererContext): BarBaselineInfo | undefined {
+  const variance = computeBaselineVariance(task, ctx.scheduleOptionsOf(task.id))
+  if (!variance) return undefined
+  return {
+    ...variance,
+    showBar: ctx.showBaseline
+  }
+}
+
 export function renderTaskBar(g: SVGGElement, task: Task, row: number, _depth: number, ctx: RendererContext): void {
   const project = ctx.scope.projectOf(task.id)
   if (!project) return
@@ -59,7 +69,8 @@ export function renderTaskBar(g: SVGGElement, task: Task, row: number, _depth: n
     row,
     color,
     barAsideText(task, ctx.labelFields, ctx.labelSource),
-    criticalInfoFor(task, ctx)
+    criticalInfoFor(task, ctx),
+    baselineInfoFor(task, ctx)
   )
   if (!drawn) return
   const { barGroup, rect, x, y, width, height } = drawn
@@ -229,7 +240,15 @@ function renderEmptyRowClickTarget(g: SVGGElement, task: Task, row: number, ctx:
 function renderMilestoneDiamond(g: SVGGElement, task: Task, row: number, color: string, ctx: RendererContext): void {
   const project = ctx.scope.projectOf(task.id)
   if (!project) return
-  const diamond = drawMilestoneDiamond(g, ctx, task, row, color, criticalInfoFor(task, ctx))
+  const diamond = drawMilestoneDiamond(
+    g,
+    ctx,
+    task,
+    row,
+    color,
+    criticalInfoFor(task, ctx),
+    baselineInfoFor(task, ctx)
+  )
   diamond?.addEventListener('click', () => {
     openTaskModal(ctx.plugin, project, { task, onSave: () => ctx.onRefresh() })
   })

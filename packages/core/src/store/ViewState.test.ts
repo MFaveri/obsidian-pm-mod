@@ -72,6 +72,12 @@ describe('viewDifferences', () => {
     expect(viewDifferences(saved, state({ showCriticalPath: true }))).toEqual(['critical'])
   })
 
+  it('compares showBaseline only when the view saved it', () => {
+    expect(viewDifferences(view, state({ showBaseline: true }))).toEqual([])
+    const saved: SavedView = { ...view, showBaseline: false }
+    expect(viewDifferences(saved, state({ showBaseline: true }))).toEqual(['baseline'])
+  })
+
   it('does not care about a mode or scale the view never named', () => {
     const loose: SavedView = { ...view, viewMode: undefined, ganttGranularity: undefined }
     expect(viewDifferences(loose, state({ mode: 'gantt', granularity: 'year' }))).toEqual([])

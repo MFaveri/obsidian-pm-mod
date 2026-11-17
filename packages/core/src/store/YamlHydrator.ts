@@ -193,6 +193,7 @@ export function hydrateNonWorkingDays(raw: unknown): NonWorkingDays {
   const days: NonWorkingDays = {}
   if (r.weekends === true) days.weekends = true
   if (r.holidays === true) days.holidays = true
+  if (r.timeOff === true) days.timeOff = true
   return days
 }
 
@@ -217,6 +218,7 @@ export function hydrateSavedViews(raw: unknown[]): SavedView[] {
         ...(granularity ? { ganttGranularity: granularity } : {}),
         ...(v.nonWorkingDays ? { nonWorkingDays: hydrateNonWorkingDays(v.nonWorkingDays) } : {}),
         ...(typeof v.showCriticalPath === 'boolean' ? { showCriticalPath: v.showCriticalPath } : {}),
+        ...(typeof v.showBaseline === 'boolean' ? { showBaseline: v.showBaseline } : {}),
         ...(v.isDefault === true ? { isDefault: true } : {})
       }
     })
@@ -232,6 +234,9 @@ export function mapRawToTask(r: Record<string, unknown>, overrides?: Partial<Tas
     priority: (r.priority as Task['priority']) ?? 'medium',
     start: (r.start as string) ?? '',
     due: (r.due as string) ?? '',
+    baselineStart:
+      typeof r.baselineStart === 'string' && parsePlainDate(r.baselineStart) ? r.baselineStart : undefined,
+    baselineDue: typeof r.baselineDue === 'string' && parsePlainDate(r.baselineDue) ? r.baselineDue : undefined,
     progress: typeof r.progress === 'number' ? r.progress : 0,
     completed: (r.completed as string) ?? '',
     // On the metadataCache path `r` is Obsidian's live frontmatter object, so these
@@ -310,6 +315,9 @@ export function hydrateProjectFromFrontmatter(
     updatedAt: (frontmatter.updatedAt as string) ?? new Date().toISOString(),
     filePath,
     savedViews: hydrateSavedViews((frontmatter.savedViews as unknown[]) ?? []),
+    ...(typeof frontmatter.baselineAt === 'string' && frontmatter.baselineAt
+      ? { baselineAt: frontmatter.baselineAt }
+      : {}),
     config: hydrateProjectConfig(frontmatter.config),
     ...(frontmatter.archived === true ? { archived: true } : {}),
     taskIndex: new Map()
@@ -345,6 +353,10 @@ function hydrateProjectConfig(raw: unknown): ProjectConfig | undefined {
   if (Array.isArray(r.extraWorkdays)) {
     const dates = [...new Set(stringList(r.extraWorkdays).filter((d) => parsePlainDate(d) !== null))].sort()
     if (dates.length) config.extraWorkdays = dates
+  }
+  if (Array.isArray(r.extraNonWorkdays)) {
+    const dates = [...new Set(stringList(r.extraNonWorkdays).filter((d) => parsePlainDate(d) !== null))].sort()
+    if (dates.length) config.extraNonWorkdays = dates
   }
   if (typeof r.autoArchiveDays === 'number' && Number.isFinite(r.autoArchiveDays) && r.autoArchiveDays >= 0) {
     config.autoArchiveDays = Math.floor(r.autoArchiveDays)

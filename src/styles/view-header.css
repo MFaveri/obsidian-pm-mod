@@ -756,6 +756,12 @@ button.pm-stepper-value:hover {
   color: var(--text-normal);
 }
 
+.pm-days-all {
+  border-top: 1px solid var(--background-modifier-border);
+  margin-top: 2px;
+  padding-top: 6px;
+}
+
 .pm-days-list {
   display: flex;
   flex-wrap: wrap;

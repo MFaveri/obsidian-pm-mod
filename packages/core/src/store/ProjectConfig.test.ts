@@ -68,6 +68,7 @@ describe('resolveProjectConfig', () => {
         scheduleWorkdaysOnly: true,
         workingWeekdays: [6],
         extraWorkdays: ['2026-11-21'],
+        extraNonWorkdays: ['2026-11-25'],
         showSubtreeConnections: false,
         lineBorders: 'both'
       }),
@@ -80,6 +81,7 @@ describe('resolveProjectConfig', () => {
     expect(resolved.scheduleWorkdaysOnly).toBe(true)
     expect(resolved.workingWeekdays).toEqual([6])
     expect(resolved.extraWorkdays).toEqual(['2026-11-21'])
+    expect(resolved.extraNonWorkdays).toEqual(['2026-11-25'])
     expect(resolved.showSubtreeConnections).toBe(false)
     expect(resolved.lineBorders).toBe('both')
     expect(resolved.statuses).toEqual(DEFAULT_STATUSES)

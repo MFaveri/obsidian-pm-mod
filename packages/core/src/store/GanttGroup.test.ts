@@ -59,6 +59,35 @@ describe('summarizeProjectSpan', () => {
       progress: 0
     })
   })
+
+  it('summarizes baseline min/max dates when tasks hold captured baselines', () => {
+    const tasks = [
+      makeTask({
+        id: 't1',
+        start: '2026-04-03',
+        due: '2026-04-12',
+        baselineStart: '2026-04-01',
+        baselineDue: '2026-04-08'
+      }),
+      makeTask({
+        id: 't2',
+        start: '2026-04-10',
+        due: '2026-04-15',
+        baselineStart: '2026-04-09',
+        baselineDue: '2026-04-14'
+      })
+    ]
+
+    expect(summarizeProjectSpan(tasks, DEFAULT_STATUSES)).toEqual({
+      start: '2026-04-03',
+      due: '2026-04-15',
+      baselineStart: '2026-04-01',
+      baselineDue: '2026-04-14',
+      done: 0,
+      total: 2,
+      progress: 0
+    })
+  })
 })
 
 describe('buildGanttRows', () => {

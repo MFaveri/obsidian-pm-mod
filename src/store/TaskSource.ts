@@ -61,6 +61,8 @@ export interface TaskSource {
     replacement: Task,
     options: { duplicateSubtasks: boolean }
   ): Promise<void>
+  captureBaseline(project: Project): Promise<number>
+  clearBaseline(project: Project): Promise<number>
   /**
    * Gives the listed tasks fresh ids, remapping every reference the project holds to
    * them, and optionally the project's own id. Repairs a project whose folder was
