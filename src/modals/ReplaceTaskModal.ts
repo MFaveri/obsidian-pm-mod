@@ -60,6 +60,25 @@ export class ReplaceTaskModal extends Modal {
       cls: 'pm-replace-input'
     })
 
+    const datesRow = contentEl.createDiv('pm-replace-dates')
+    let startInput: HTMLInputElement | null = null
+    if (this.source.type !== 'milestone') {
+      const startField = datesRow.createDiv('pm-replace-field')
+      startField.createEl('label', { text: t('taskForm.start') })
+      startInput = startField.createEl('input', {
+        type: 'date',
+        value: this.source.start
+      })
+    }
+    const dueField = datesRow.createDiv('pm-replace-field')
+    dueField.createEl('label', {
+      text: this.source.type === 'milestone' ? t('taskForm.date') : t('taskForm.due')
+    })
+    const dueInput = dueField.createEl('input', {
+      type: 'date',
+      value: this.source.due
+    })
+
     const existingRow = contentEl.createDiv('pm-replace-field pm-hidden')
     existingRow.createEl('label', { text: t('replace.existingTask') })
     const existingSelect = existingRow.createEl('select')
@@ -101,6 +120,7 @@ export class ReplaceTaskModal extends Modal {
     const showMode = (): void => {
       const existing = modeSelect.value === 'existing'
       newRow.toggleClass('pm-hidden', existing)
+      datesRow.toggleClass('pm-hidden', existing)
       existingRow.toggleClass('pm-hidden', !existing)
       updatePreview()
     }
@@ -130,13 +150,17 @@ export class ReplaceTaskModal extends Modal {
           titleInput.focus()
           return
         }
+        const rawStart = startInput?.value ?? ''
+        const rawDue = dueInput.value ?? ''
+        const start = this.source.type === 'milestone' ? '' : rawStart
+        const due = start && rawDue && rawDue < start ? start : rawDue
         replacement = makeTask({
           title,
           type: this.source.type,
           status: getDefaultStatusId(config.statuses),
           priority: getDefaultPriorityId(config.priorities),
-          start: '',
-          due: ''
+          start,
+          due
         })
       }
 
@@ -144,6 +168,7 @@ export class ReplaceTaskModal extends Modal {
       submitButton.setDisabled(true)
       try {
         await this.plugin.store.replaceTask(this.project, this.source.id, replacement, { duplicateSubtasks })
+        await this.plugin.store.scheduleAfterChange(this.project, replacement.id)
         new Notice(t('replace.replacedNotice', { source: this.source.title, replacement: replacement.title }))
         this.close()
         void (async () => {

@@ -1,7 +1,15 @@
 import { Menu } from 'obsidian'
 import { Chip, CollapseToggle, IconButton, renderStatusDot, safeAsync, ROW_HEIGHT } from '@dotpm/ui'
 import type PMPlugin from '#main'
-import { type Project, type ProjectSpanSummary, type StatusConfig, type Task, t, tn } from '@dotpm/core'
+import {
+  type CriticalPathResult,
+  type Project,
+  type ProjectSpanSummary,
+  type StatusConfig,
+  type Task,
+  t,
+  tn
+} from '@dotpm/core'
 import type { ProjectScope, TaskRef } from '#store'
 import { openTaskByPath, openTaskModal } from '#ui/ModalFactory'
 import { toggleCollapsed, toggleGanttProjectCollapsed } from '../collapse'
@@ -11,6 +19,8 @@ export interface LabelContext {
   scope: ProjectScope
   statuses: StatusConfig[]
   collapsedIds: ReadonlySet<string>
+  criticalPath?: CriticalPathResult
+  showCriticalPath?: boolean
   onRefresh: () => Promise<void>
 }
 
@@ -156,6 +166,22 @@ export function renderTaskLabel(
         }
         menu.showAtMouseEvent(e)
       })
+  }
+
+  if (ctx.showCriticalPath) {
+    const cpm = ctx.criticalPath?.tasks[task.id]
+    if (cpm) {
+      if (cpm.critical) el.addClass('pm-gantt-label-row--critical')
+      const badge = el.createSpan({
+        text: cpm.critical ? t('gantt.criticalShort') : t('gantt.slackShort', { count: cpm.slackDays }),
+        cls: `pm-gantt-label-slack${cpm.critical ? ' pm-gantt-label-slack--critical' : ''}`
+      })
+      badge.setAttribute(
+        'aria-label',
+        cpm.critical ? t('gantt.tooltipCritical') : tn('gantt.tooltipSlack', cpm.slackDays)
+      )
+      badge.setAttribute('title', cpm.critical ? t('gantt.tooltipCritical') : tn('gantt.tooltipSlack', cpm.slackDays))
+    }
   }
 
   if (task.progress > 0) {

@@ -1,5 +1,5 @@
 import type PMPlugin from '#main'
-import type { StatusConfig } from '@dotpm/core'
+import type { CriticalPathResult, StatusConfig } from '@dotpm/core'
 import type { ProjectScope } from '#store'
 import type { GanttCanvas, GanttRow, LabelSource } from '@dotpm/ui'
 import type { DragState } from './GanttDragHandler'
@@ -19,6 +19,8 @@ export interface RendererContext extends GanttCanvas {
   labelSource: LabelSource
   taskRows: GanttRow[]
   totalRows: number
+  criticalPath: CriticalPathResult
+  showCriticalPath: boolean
   drag: DragState
   link: LinkState
   onRefresh: () => Promise<void>

@@ -1,4 +1,4 @@
-import { Temporal } from '../dates'
+import { Temporal, parsePlainDate } from '../dates'
 import { DEFAULT_WORKING_WEEKDAYS, type StatusConfig, type Task } from '../types'
 import { isTerminalStatus } from '../utils'
 import { flattenTasks } from './TaskTreeOps'
@@ -19,6 +19,30 @@ export interface ScheduleOptions {
   workingWeekdays?: readonly number[]
   holidays?: readonly string[]
   extraWorkdays?: readonly string[]
+}
+
+export interface CriticalPathOptions extends ScheduleOptions {
+  pullForward?: boolean
+}
+
+export interface CriticalPathTaskInfo {
+  taskId: string
+  earlyStart: string
+  earlyFinish: string
+  lateStart: string
+  lateFinish: string
+  /** Total slack in working days (or calendar days when workdaysOnly is false). */
+  slackDays: number
+  critical: boolean
+}
+
+export interface CriticalPathResult {
+  projectFinish: string
+  tasks: Record<string, CriticalPathTaskInfo>
+  criticalTaskIds: string[]
+  /** Driving dependency pairs [fromId, toId] between active critical tasks with zero gap. */
+  criticalEdges: [string, string][]
+  cycles: string[][]
 }
 
 interface WorkdayCalendar {
@@ -141,35 +165,24 @@ function resolveDependencyId(depId: string, taskById: Map<string, Task>): string
   return current?.id ?? null
 }
 
-/**
- * Date patches derived from the dependency graph. `changed` scopes the pass to the
- * downstream dependents of the task ids it names. Terminal-status tasks never move;
- * their dates are a record of what happened.
- *
- * With `pullForward`, a predecessor that finished early counts as ending on its
- * completion date and its dependents move up by the days saved, keeping their existing
- * slack and never starting before the day after a predecessor ends.
- */
-export function computeSchedule(
-  tasks: Task[],
-  /** The tasks whose dates just moved. Absent reschedules the whole tree. */
-  changed?: string | string[],
-  statuses: StatusConfig[] = [],
-  pullForward = false,
-  /** Predecessors in other projects. They constrain dates here but are never moved. */
-  externals: Task[] = [],
-  options: ScheduleOptions = {}
-): ScheduleResult {
-  const weekdays = new Set(options.workingWeekdays ?? DEFAULT_WORKING_WEEKDAYS)
+function buildWorkdayCalendar(options: ScheduleOptions = {}): WorkdayCalendar {
+  const workingWeekdays = new Set(options.workingWeekdays ?? DEFAULT_WORKING_WEEKDAYS)
   const extraWorkdays = new Set(options.extraWorkdays ?? [])
-  const calendar: WorkdayCalendar = {
-    workdaysOnly: options.workdaysOnly === true && (weekdays.size > 0 || extraWorkdays.size > 0),
-    workingWeekdays: weekdays,
+  return {
+    workdaysOnly: options.workdaysOnly === true && (workingWeekdays.size > 0 || extraWorkdays.size > 0),
+    workingWeekdays,
     holidays: new Set(options.holidays ?? []),
     extraWorkdays
   }
-  const externalIds = new Set(externals.map((t) => t.id))
-  const flat = [...flattenTasks(tasks).map((ft) => ft.task), ...externals]
+}
+
+interface DependencyGraph {
+  taskById: Map<string, Task>
+  predecessorsOf: Map<string, string[]>
+  dependentsOf: Map<string, string[]>
+}
+
+function buildDependencyGraph(flat: Task[]): DependencyGraph {
   const taskById = new Map<string, Task>()
   const dependentsOf = new Map<string, string[]>()
   const predecessorsOf = new Map<string, string[]>()
@@ -194,6 +207,71 @@ export function computeSchedule(
     }
   }
 
+  return { taskById, predecessorsOf, dependentsOf }
+}
+
+function topoSortGraph(
+  relevantIds: string[],
+  graph: DependencyGraph,
+  scopeIds: Set<string> | null
+): { topoOrder: string[]; cycles: string[][] } {
+  const inDegree = new Map<string, number>()
+  for (const id of relevantIds) {
+    const deps = graph.predecessorsOf.get(id) ?? []
+    const filtered = scopeIds ? deps.filter((d) => scopeIds.has(d)) : deps
+    inDegree.set(id, filtered.length)
+  }
+
+  const queue: string[] = []
+  for (const [id, deg] of inDegree) {
+    if (deg === 0) queue.push(id)
+  }
+
+  const topoOrder: string[] = []
+  while (queue.length > 0) {
+    const id = queue.shift()
+    if (id === undefined) break
+    topoOrder.push(id)
+    for (const depId of graph.dependentsOf.get(id) ?? []) {
+      const currentDeg = inDegree.get(depId)
+      if (currentDeg === undefined) continue
+      const newDeg = currentDeg - 1
+      inDegree.set(depId, newDeg)
+      if (newDeg === 0) queue.push(depId)
+    }
+  }
+
+  const sortedSet = new Set(topoOrder)
+  const cycleIds = relevantIds.filter((id) => !sortedSet.has(id))
+  const cycles: string[][] = cycleIds.length > 0 ? [cycleIds] : []
+  return { topoOrder, cycles }
+}
+
+/**
+ * Date patches derived from the dependency graph. `changed` scopes the pass to the
+ * downstream dependents of the task ids it names. Terminal-status tasks never move;
+ * their dates are a record of what happened.
+ *
+ * With `pullForward`, a predecessor that finished early counts as ending on its
+ * completion date and its dependents move up by the days saved, keeping their existing
+ * slack and never starting before the day after a predecessor ends.
+ */
+export function computeSchedule(
+  tasks: Task[],
+  /** The tasks whose dates just moved. Absent reschedules the whole tree. */
+  changed?: string | string[],
+  statuses: StatusConfig[] = [],
+  pullForward = false,
+  /** Predecessors in other projects. They constrain dates here but are never moved. */
+  externals: Task[] = [],
+  options: ScheduleOptions = {}
+): ScheduleResult {
+  const calendar = buildWorkdayCalendar(options)
+  const externalIds = new Set(externals.map((t) => t.id))
+  const flat = [...flattenTasks(tasks).map((ft) => ft.task), ...externals]
+  const graph = buildDependencyGraph(flat)
+  const { taskById, dependentsOf, predecessorsOf } = graph
+
   const seeds = changed === undefined ? [] : typeof changed === 'string' ? [changed] : changed
   let scopeIds: Set<string> | null = null
   if (seeds.length > 0) {
@@ -210,39 +288,8 @@ export function computeSchedule(
     }
   }
 
-  // Kahn's algorithm: topological sort, with the leftovers being the cycles.
-  const inDegree = new Map<string, number>()
   const relevantIds = scopeIds ? [...scopeIds] : flat.map((t) => t.id)
-
-  const scope = scopeIds
-  for (const id of relevantIds) {
-    const deps = predecessorsOf.get(id) ?? []
-    const filtered = scope ? deps.filter((d) => scope.has(d)) : deps
-    inDegree.set(id, filtered.length)
-  }
-
-  const queue: string[] = []
-  for (const [id, deg] of inDegree) {
-    if (deg === 0) queue.push(id)
-  }
-
-  const topoOrder: string[] = []
-  while (queue.length > 0) {
-    const id = queue.shift()
-    if (id === undefined) break
-    topoOrder.push(id)
-    for (const depId of dependentsOf.get(id) ?? []) {
-      const currentDeg = inDegree.get(depId)
-      if (currentDeg === undefined) continue
-      const newDeg = currentDeg - 1
-      inDegree.set(depId, newDeg)
-      if (newDeg === 0) queue.push(depId)
-    }
-  }
-
-  const sortedSet = new Set(topoOrder)
-  const cycleIds = relevantIds.filter((id) => !sortedSet.has(id))
-  const cycles: string[][] = cycleIds.length > 0 ? [cycleIds] : []
+  const { topoOrder, cycles } = topoSortGraph(relevantIds, graph, scopeIds)
 
   // Mutable copies of the dates, so a shift cascades within this run.
   const startOf = new Map<string, string>()
@@ -282,7 +329,7 @@ export function computeSchedule(
     for (const depId of deps) {
       const dep = taskById.get(depId)
       if (dep?.archived) continue
-      const depDue = dueOf.get(depId) ?? ''
+      const depDue = dueOf.get(depId) || startOf.get(depId) || ''
       if (!depDue) continue
       if (!latestDue || depDue > latestDue) latestDue = depDue
       const plannedDue = stepWorkingDays(
@@ -357,4 +404,189 @@ export function computeSchedule(
   }
 
   return { patches, cycles }
+}
+
+/**
+ * Critical Path Method (CPM) over the current task schedule: forward pass respects
+ * each task's scheduled start and predecessor finish + 1 working day; backward pass
+ * computes latest dates, total slack (in working days when `workdaysOnly` is set),
+ * critical tasks (`slackDays === 0`), and tight driving edges between them.
+ *
+ * Completed, cancelled, superseded, archived, external, and undated tasks are never
+ * flagged critical themselves, though completed and external predecessors still
+ * constrain downstream active tasks in the forward pass.
+ */
+export function computeCriticalPath(
+  tasks: Task[],
+  statuses: StatusConfig[] = [],
+  externals: Task[] = [],
+  options: CriticalPathOptions = {}
+): CriticalPathResult {
+  const calendar = buildWorkdayCalendar(options)
+  const externalIds = new Set(externals.map((t) => t.id))
+  const flat = [...flattenTasks(tasks).map((ft) => ft.task), ...externals]
+  const graph = buildDependencyGraph(flat)
+  const { taskById, dependentsOf, predecessorsOf } = graph
+  const { topoOrder, cycles } = topoSortGraph(
+    flat.map((t) => t.id),
+    graph,
+    null
+  )
+
+  const earlyStartMap = new Map<string, Temporal.PlainDate>()
+  const earlyFinishMap = new Map<string, Temporal.PlainDate>()
+  const durationMap = new Map<string, number>()
+  const activeDatedOrder: string[] = []
+  let projectFinishDate: Temporal.PlainDate | null = null
+
+  for (const id of topoOrder) {
+    const task = taskById.get(id)
+    if (!task || task.archived || task.status === 'superseded') continue
+
+    const parsedStart = parsePlainDate(task.start)
+    const parsedDue = parsePlainDate(task.due)
+    const schedStart = parsedStart ?? parsedDue
+    if (!schedStart) continue
+    const rawDue = parsedDue ?? schedStart
+    const schedDue = Temporal.PlainDate.compare(rawDue, schedStart) < 0 ? schedStart : rawDue
+
+    const isExternal = externalIds.has(id)
+    const isTerminal = !isExternal && isTerminalStatus(task.status, statuses)
+    if (isExternal || isTerminal) {
+      const earlyCompleted =
+        options.pullForward && task.completed && task.due && task.completed < task.due
+          ? parsePlainDate(task.completed)
+          : null
+      earlyStartMap.set(id, schedStart)
+      earlyFinishMap.set(id, earlyCompleted ?? schedDue)
+      continue
+    }
+
+    const isMilestone = task.type === 'milestone' || (!task.start && !!task.due)
+    const duration = isMilestone ? 1 : countWorkingDaysInclusive(schedStart, schedDue, calendar)
+
+    let minStartFromPreds: Temporal.PlainDate | null = null
+    for (const depId of predecessorsOf.get(id) ?? []) {
+      const depTask = taskById.get(depId)
+      if (!depTask || depTask.archived || depTask.status === 'superseded') continue
+      const depFinish = earlyFinishMap.get(depId)
+      if (!depFinish) continue
+      const nextStart = stepWorkingDays(depFinish, 1, calendar)
+      if (!minStartFromPreds || Temporal.PlainDate.compare(nextStart, minStartFromPreds) > 0) {
+        minStartFromPreds = nextStart
+      }
+    }
+
+    let earlyStart: Temporal.PlainDate
+    let earlyFinish: Temporal.PlainDate
+    if (minStartFromPreds && Temporal.PlainDate.compare(minStartFromPreds, schedStart) > 0) {
+      earlyStart = minStartFromPreds
+      earlyFinish = duration === 1 ? earlyStart : stepWorkingDays(earlyStart, duration - 1, calendar)
+    } else {
+      earlyStart = schedStart
+      earlyFinish = isMilestone ? earlyStart : schedDue
+    }
+
+    earlyStartMap.set(id, earlyStart)
+    earlyFinishMap.set(id, earlyFinish)
+    durationMap.set(id, duration)
+    activeDatedOrder.push(id)
+
+    if (!projectFinishDate || Temporal.PlainDate.compare(earlyFinish, projectFinishDate) > 0) {
+      projectFinishDate = earlyFinish
+    }
+  }
+
+  if (!projectFinishDate) {
+    return { projectFinish: '', tasks: {}, criticalTaskIds: [], criticalEdges: [], cycles }
+  }
+
+  const lateStartMap = new Map<string, Temporal.PlainDate>()
+  const lateFinishMap = new Map<string, Temporal.PlainDate>()
+  const slackMap = new Map<string, number>()
+
+  for (let i = activeDatedOrder.length - 1; i >= 0; i--) {
+    const id = activeDatedOrder[i]
+    let minSuccLateStart: Temporal.PlainDate | null = null
+    for (const succId of dependentsOf.get(id) ?? []) {
+      const succLateStart = lateStartMap.get(succId)
+      if (!succLateStart) continue
+      if (!minSuccLateStart || Temporal.PlainDate.compare(succLateStart, minSuccLateStart) < 0) {
+        minSuccLateStart = succLateStart
+      }
+    }
+
+    const earlyStart = earlyStartMap.get(id)
+    const earlyFinish = earlyFinishMap.get(id)
+    if (!earlyStart || !earlyFinish) continue
+    let lateFinish = minSuccLateStart ? stepWorkingDays(minSuccLateStart, -1, calendar) : projectFinishDate
+    const slackDays = Math.max(0, workingDaysBetween(earlyFinish, lateFinish, calendar))
+
+    let lateStart: Temporal.PlainDate
+    if (slackDays === 0) {
+      lateFinish = earlyFinish
+      lateStart = earlyStart
+    } else {
+      if (Temporal.PlainDate.compare(lateFinish, earlyFinish) < 0) {
+        lateFinish = earlyFinish
+      }
+      const duration = durationMap.get(id) ?? 1
+      lateStart = duration === 1 ? lateFinish : stepWorkingDays(lateFinish, -(duration - 1), calendar)
+    }
+
+    lateStartMap.set(id, lateStart)
+    lateFinishMap.set(id, lateFinish)
+    slackMap.set(id, slackDays)
+  }
+
+  const infoById: Record<string, CriticalPathTaskInfo> = {}
+  const criticalTaskIds: string[] = []
+  const criticalSet = new Set<string>()
+
+  for (const id of activeDatedOrder) {
+    const earlyStart = earlyStartMap.get(id)
+    const earlyFinish = earlyFinishMap.get(id)
+    const lateStart = lateStartMap.get(id)
+    const lateFinish = lateFinishMap.get(id)
+    if (!earlyStart || !earlyFinish || !lateStart || !lateFinish) continue
+    const slackDays = slackMap.get(id) ?? 0
+    const critical = slackDays === 0
+    if (critical) {
+      criticalTaskIds.push(id)
+      criticalSet.add(id)
+    }
+    infoById[id] = {
+      taskId: id,
+      earlyStart: earlyStart.toString(),
+      earlyFinish: earlyFinish.toString(),
+      lateStart: lateStart.toString(),
+      lateFinish: lateFinish.toString(),
+      slackDays,
+      critical
+    }
+  }
+
+  const criticalEdges: [string, string][] = []
+  for (const toId of activeDatedOrder) {
+    if (!criticalSet.has(toId)) continue
+    const toEarlyStart = earlyStartMap.get(toId)
+    if (!toEarlyStart) continue
+    for (const fromId of predecessorsOf.get(toId) ?? []) {
+      if (!criticalSet.has(fromId)) continue
+      const fromEarlyFinish = earlyFinishMap.get(fromId)
+      if (!fromEarlyFinish) continue
+      const nextAfterPred = stepWorkingDays(fromEarlyFinish, 1, calendar)
+      if (Temporal.PlainDate.compare(nextAfterPred, toEarlyStart) >= 0) {
+        criticalEdges.push([fromId, toId])
+      }
+    }
+  }
+
+  return {
+    projectFinish: projectFinishDate.toString(),
+    tasks: infoById,
+    criticalTaskIds,
+    criticalEdges,
+    cycles
+  }
 }

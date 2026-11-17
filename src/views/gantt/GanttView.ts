@@ -1,13 +1,18 @@
 import type { Scope } from 'obsidian'
 import type PMPlugin from '#main'
 import {
+  type CriticalPathResult,
   type GanttGranularity,
   type GanttRowItem,
   type NonWorkingDays,
   type Project,
+  type Task,
   type TaskQuery,
   type ViewFields,
   buildGanttRows,
+  computeCriticalPath,
+  flattenTasks,
+  makeTask,
   shownFields,
   Temporal,
   today,
@@ -52,6 +57,13 @@ export class GanttView implements SubView {
   private svgEl!: SVGSVGElement
   private headerSvgEl!: SVGSVGElement
   private rows: GanttRowItem<Project>[] = []
+  private criticalPath: CriticalPathResult = {
+    projectFinish: '',
+    tasks: {},
+    criticalTaskIds: [],
+    criticalEdges: [],
+    cycles: []
+  }
   /** Read from settings once per render pass. */
   private collapsedIds: ReadonlySet<string> = new Set()
   private collapsedProjectPaths: ReadonlySet<string> = new Set()
@@ -82,6 +94,7 @@ export class GanttView implements SubView {
     private fields: ViewFields,
     private zoom: number,
     private nonWorkingDays: NonWorkingDays,
+    private showCriticalPath: boolean,
     /** Ctrl+scroll changed the zoom. */
     private onZoom: (zoom: number) => void
   ) {}
@@ -158,9 +171,26 @@ export class GanttView implements SubView {
     })
     this.rows = rows
     const extraWorkdays = this.scope.projects.flatMap((p) => this.plugin.store.configFor(p).extraWorkdays)
-    const workingWeekdays = !this.scope.isMulti && this.scope.primary
-      ? this.plugin.store.configFor(this.scope.primary).workingWeekdays
-      : undefined
+    const primaryCfg = !this.scope.isMulti && this.scope.primary
+      ? this.plugin.store.configFor(this.scope.primary)
+      : null
+    const workingWeekdays = primaryCfg?.workingWeekdays
+    this.criticalPath = computeCriticalPath(
+      this.scope.projects.flatMap((p) => p.tasks),
+      this.scope.config.statuses,
+      this.externalPredecessors(),
+      {
+        workdaysOnly: primaryCfg
+          ? primaryCfg.scheduleWorkdaysOnly
+          : this.scope.projects.some((p) => this.plugin.store.configFor(p).scheduleWorkdaysOnly),
+        workingWeekdays: workingWeekdays ?? this.plugin.settings.workingWeekdays,
+        holidays: this.plugin.settings.holidays,
+        extraWorkdays,
+        pullForward: primaryCfg
+          ? primaryCfg.pullForwardOnEarlyFinish
+          : this.scope.projects.some((p) => this.plugin.store.configFor(p).pullForwardOnEarlyFinish)
+      }
+    )
     this.cfg = buildTimelineConfig(timelineTasks, this.granularity, {
       zoom: this.zoom,
       isHidden: nonWorkingDay(this.nonWorkingDays, this.plugin.settings.holidays, { workingWeekdays, extraWorkdays }),
@@ -168,6 +198,39 @@ export class GanttView implements SubView {
     })
 
     this.renderGantt()
+  }
+
+  private externalPredecessors(): Task[] {
+    const seen = new Set<string>()
+    const externals: Task[] = []
+    const queue: string[] = []
+    for (const p of this.scope.projects) {
+      for (const ft of flattenTasks(p.tasks)) {
+        for (const depId of ft.task.dependencies) queue.push(depId)
+      }
+    }
+    while (queue.length > 0) {
+      const id = queue.shift()
+      if (!id || seen.has(id) || this.scope.taskById(id)) continue
+      seen.add(id)
+      const ref = this.plugin.index.task(id)
+      if (!ref) continue
+      externals.push(
+        makeTask({
+          id: ref.id,
+          title: ref.title,
+          status: ref.status,
+          start: ref.start,
+          due: ref.due,
+          completed: ref.completed,
+          dependencies: ref.dependencies,
+          replacedBy: ref.replacedBy,
+          archived: ref.archived
+        })
+      )
+      if (ref.replacedBy) queue.push(ref.replacedBy)
+    }
+    return externals
   }
 
   private renderGantt(): void {
@@ -323,6 +386,8 @@ export class GanttView implements SubView {
       scope: this.scope,
       statuses: this.scope.config.statuses,
       collapsedIds: this.collapsedIds,
+      criticalPath: this.criticalPath,
+      showCriticalPath: this.showCriticalPath,
       onRefresh: this.onRefresh
     }
 
@@ -372,6 +437,8 @@ export class GanttView implements SubView {
         .filter((item): item is Extract<GanttRowItem<Project>, { kind: 'task' }> => item.kind === 'task')
         .map((item) => ({ task: item.task, depth: item.depth, row: item.rowIndex })),
       totalRows: this.rows.length,
+      criticalPath: this.criticalPath,
+      showCriticalPath: this.showCriticalPath,
       drag: this.drag,
       link: this.link,
       onRefresh: this.onRefresh,

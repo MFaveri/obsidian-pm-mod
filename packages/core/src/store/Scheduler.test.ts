@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_STATUSES, makeTask, type StatusConfig, type Task } from '../types'
-import { addDays, computeSchedule, daysBetween, wouldCreateCycle } from './Scheduler'
+import { addDays, computeCriticalPath, computeSchedule, daysBetween, wouldCreateCycle } from './Scheduler'
 
 function task(overrides: Partial<Task> & { id: string }): Task {
   return makeTask({
@@ -385,5 +385,130 @@ describe('computeSchedule with workdaysOnly and holidays', () => {
       { taskId: 'b', start: '2026-11-21', due: '2026-11-23' },
       { taskId: 'd', start: '2026-11-30', due: '2026-11-30' }
     ])
+  })
+
+  it('uses start date as fallback end when a predecessor only has a start date', () => {
+    const tasks = [
+      task({ id: 'a', start: '2026-04-06', due: '' }),
+      task({ id: 'b', start: '2026-04-05', due: '2026-04-07', dependencies: ['a'] })
+    ]
+    const result = computeSchedule(tasks, undefined, statuses)
+    expect(result.patches).toEqual([{ taskId: 'b', start: '2026-04-07', due: '2026-04-09' }])
+  })
+})
+
+describe('computeCriticalPath', () => {
+  it('identifies critical tasks, total slack, and driving edges across parallel branches', () => {
+    const tasks = [
+      task({ id: 'a', start: '2026-04-01', due: '2026-04-02' }), // 2 days -> feeds c (2 days slack)
+      task({ id: 'b', start: '2026-04-01', due: '2026-04-04' }), // 4 days -> feeds c (critical)
+      task({ id: 'c', start: '2026-04-05', due: '2026-04-08', dependencies: ['a', 'b'] }) // critical
+    ]
+
+    const result = computeCriticalPath(tasks, statuses)
+    expect(result.projectFinish).toBe('2026-04-08')
+    expect(result.criticalTaskIds).toEqual(['b', 'c'])
+    expect(result.criticalEdges).toEqual([['b', 'c']])
+    expect(result.tasks.a).toMatchObject({
+      slackDays: 2,
+      critical: false,
+      lateStart: '2026-04-03',
+      lateFinish: '2026-04-04'
+    })
+    expect(result.tasks.b).toMatchObject({ slackDays: 0, critical: true })
+    expect(result.tasks.c).toMatchObject({ slackDays: 0, critical: true })
+  })
+
+  it('gives slack to a predecessor when the successor is scheduled later with a manual buffer', () => {
+    const tasks = [
+      task({ id: 'a', start: '2026-04-01', due: '2026-04-03' }),
+      task({ id: 'b', start: '2026-04-06', due: '2026-04-08', dependencies: ['a'] })
+    ]
+
+    const result = computeCriticalPath(tasks, statuses)
+    expect(result.projectFinish).toBe('2026-04-08')
+    expect(result.criticalTaskIds).toEqual(['b'])
+    expect(result.criticalEdges).toEqual([])
+    expect(result.tasks.a.slackDays).toBe(2)
+    expect(result.tasks.b.slackDays).toBe(0)
+  })
+
+  it('includes milestones cleanly on the critical path', () => {
+    const tasks = [
+      task({ id: 'a', start: '2026-04-01', due: '2026-04-03' }),
+      task({ id: 'm', type: 'milestone', due: '2026-04-04', dependencies: ['a'] }),
+      task({ id: 'b', start: '2026-04-05', due: '2026-04-07', dependencies: ['m'] })
+    ]
+
+    const result = computeCriticalPath(tasks, statuses)
+    expect(result.criticalTaskIds).toEqual(['a', 'm', 'b'])
+    expect(result.criticalEdges).toEqual([
+      ['a', 'm'],
+      ['m', 'b']
+    ])
+  })
+
+  it('excludes completed, archived, and superseded tasks from criticality while keeping constraints', () => {
+    const tasks = [
+      task({ id: 'old', status: 'superseded', replacedBy: 'done1', start: '2026-04-01', due: '2026-04-02' }),
+      task({ id: 'done1', status: 'done', start: '2026-04-01', due: '2026-04-05' }),
+      task({ id: 'arch', archived: true, start: '2026-04-01', due: '2026-04-20' }),
+      task({ id: 'next', status: 'todo', start: '2026-04-03', due: '2026-04-07', dependencies: ['old'] })
+    ]
+
+    const result = computeCriticalPath(tasks, statuses)
+    expect(result.tasks.old).toBeUndefined()
+    expect(result.tasks.done1).toBeUndefined()
+    expect(result.tasks.arch).toBeUndefined()
+    // `old` resolves to `done1` (due 04-05), pushing `next` (duration 5) to 04-06..04-10.
+    expect(result.projectFinish).toBe('2026-04-10')
+    expect(result.tasks.next).toMatchObject({
+      earlyStart: '2026-04-06',
+      earlyFinish: '2026-04-10',
+      slackDays: 0,
+      critical: true
+    })
+    expect(result.criticalEdges).toEqual([])
+  })
+
+  it('computes slack in working days respecting weekdays, holidays, and extraWorkdays', () => {
+    // 2026-11-20 is Friday; Sat 2026-11-21 is an extra workday; Sun 2026-11-22 is off; Mon 2026-11-23 is a holiday.
+    // Task a ends Fri 2026-11-20. Task b starts Tue 2026-11-24.
+    // Working days between Fri 2026-11-20 and Mon 2026-11-23 (= Tue - 1wday? No, Sat 11-21 IS a workday!):
+    // stepWorkingDays(Tue 2026-11-24, -1) lands on Sat 2026-11-21, so slack(a) = 1 working day (Sat 11-21).
+    const tasks = [
+      task({ id: 'a', start: '2026-11-19', due: '2026-11-20' }),
+      task({ id: 'b', start: '2026-11-24', due: '2026-11-25', dependencies: ['a'] })
+    ]
+
+    const withExtra = computeCriticalPath(tasks, statuses, [], {
+      workdaysOnly: true,
+      holidays: ['2026-11-23'],
+      extraWorkdays: ['2026-11-21']
+    })
+    expect(withExtra.tasks.a.slackDays).toBe(1)
+    expect(withExtra.tasks.a.critical).toBe(false)
+
+    // Without extraWorkdays on Sat 11-21 and Mon 11-23 still a holiday, Fri 11-20 -> Tue 11-24 has 0 slack!
+    const tight = computeCriticalPath(tasks, statuses, [], {
+      workdaysOnly: true,
+      holidays: ['2026-11-23']
+    })
+    expect(tight.tasks.a.slackDays).toBe(0)
+    expect(tight.tasks.a.critical).toBe(true)
+    expect(tight.criticalEdges).toEqual([['a', 'b']])
+  })
+
+  it('returns empty results when no active dated tasks exist and reports cycles', () => {
+    const emptyResult = computeCriticalPath([task({ id: 'u' }), task({ id: 'd', status: 'done', due: '2026-04-05' })], statuses)
+    expect(emptyResult.projectFinish).toBe('')
+    expect(emptyResult.criticalTaskIds).toEqual([])
+
+    const cyclic = computeCriticalPath([
+      task({ id: 'x', start: '2026-04-01', due: '2026-04-02', dependencies: ['y'] }),
+      task({ id: 'y', start: '2026-04-03', due: '2026-04-04', dependencies: ['x'] })
+    ], statuses)
+    expect(cyclic.cycles).toEqual([['x', 'y']])
+    expect(cyclic.criticalTaskIds).toEqual([])
   })
 })

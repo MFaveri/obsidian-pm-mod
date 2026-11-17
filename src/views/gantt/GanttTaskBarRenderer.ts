@@ -1,6 +1,7 @@
 import { Notice } from 'obsidian'
 import { DependencyBlockedError, ReplacementRequiredError, type Task, t } from '@dotpm/core'
 import {
+  type BarCriticalInfo,
   svgEl,
   safeAsync,
   barAsideText,
@@ -22,6 +23,16 @@ import { openTaskModal } from '#ui/ModalFactory'
 import { attachBarDrag } from './GanttDragHandler'
 import { handleLinkDotClick } from './GanttLinkHandler'
 import type { RendererContext } from './GanttRenderer'
+
+function criticalInfoFor(task: Task, ctx: RendererContext): BarCriticalInfo | undefined {
+  const info = ctx.criticalPath.tasks[task.id]
+  if (!info) return undefined
+  return {
+    critical: info.critical,
+    slackDays: info.slackDays,
+    highlight: ctx.showCriticalPath
+  }
+}
 
 export function renderTaskBar(g: SVGGElement, task: Task, row: number, _depth: number, ctx: RendererContext): void {
   const project = ctx.scope.projectOf(task.id)
@@ -47,7 +58,8 @@ export function renderTaskBar(g: SVGGElement, task: Task, row: number, _depth: n
     task,
     row,
     color,
-    barAsideText(task, ctx.labelFields, ctx.labelSource)
+    barAsideText(task, ctx.labelFields, ctx.labelSource),
+    criticalInfoFor(task, ctx)
   )
   if (!drawn) return
   const { barGroup, rect, x, y, width, height } = drawn
@@ -217,7 +229,7 @@ function renderEmptyRowClickTarget(g: SVGGElement, task: Task, row: number, ctx:
 function renderMilestoneDiamond(g: SVGGElement, task: Task, row: number, color: string, ctx: RendererContext): void {
   const project = ctx.scope.projectOf(task.id)
   if (!project) return
-  const diamond = drawMilestoneDiamond(g, ctx, task, row, color)
+  const diamond = drawMilestoneDiamond(g, ctx, task, row, color, criticalInfoFor(task, ctx))
   diamond?.addEventListener('click', () => {
     openTaskModal(ctx.plugin, project, { task, onSave: () => ctx.onRefresh() })
   })
@@ -228,5 +240,8 @@ export function renderMilestoneLabels(ctx: RendererContext): void {
 }
 
 export function renderDependencyArrows(ctx: RendererContext): void {
-  drawDependencyArrows(ctx, ctx.taskRows)
+  const criticalEdges = ctx.showCriticalPath
+    ? new Set(ctx.criticalPath.criticalEdges.map(([from, to]) => `${from}->${to}`))
+    : undefined
+  drawDependencyArrows(ctx, ctx.taskRows, criticalEdges)
 }

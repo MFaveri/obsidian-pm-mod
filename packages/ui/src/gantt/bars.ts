@@ -8,7 +8,8 @@ import {
   getPriorityConfig,
   getStatusConfig,
   parsePlainDate,
-  t
+  t,
+  tn
 } from '@dotpm/core'
 import { cardCustomValues } from '../views/boardCards'
 import { svgEl } from '#dom'
@@ -62,6 +63,17 @@ export interface DrawnBar {
   height: number
 }
 
+export interface BarCriticalInfo {
+  critical: boolean
+  slackDays: number
+  /** When true, highlights critical elements and dims non-critical ones. */
+  highlight?: boolean
+}
+
+function formatSlackTooltip(info: BarCriticalInfo): string {
+  return info.critical ? t('gantt.tooltipCritical') : tn('gantt.tooltipSlack', info.slackDays)
+}
+
 export interface LabelSource {
   statuses: StatusConfig[]
   priorities: PriorityConfig[]
@@ -101,7 +113,8 @@ export function drawTaskBar(
   task: Task,
   row: number,
   color: string,
-  aside = ''
+  aside = '',
+  criticalInfo?: BarCriticalInfo
 ): DrawnBar | null {
   const startDate = parsePlainDate(task.start)
   const endDate = parsePlainDate(task.due)
@@ -116,7 +129,12 @@ export function drawTaskBar(
   const xEnd = Math.min(canvas.cfg.totalWidth, dateToX(canvas.cfg, effectiveEnd))
   const width = Math.max(8, xEnd - x)
 
-  const barGroup = svgEl('g', { class: 'pm-gantt-bar-group' })
+  const highlightClass = criticalInfo?.highlight
+    ? criticalInfo.critical
+      ? ' pm-gantt-bar-group--critical'
+      : ' pm-gantt-bar-group--dimmed'
+    : ''
+  const barGroup = svgEl('g', { class: `pm-gantt-bar-group${highlightClass}` })
   g.appendChild(barGroup)
 
   const rect = svgEl('rect', {
@@ -128,7 +146,7 @@ export function drawTaskBar(
     ry: BAR_BORDER_RADIUS,
     fill: color,
     opacity: 0.4,
-    class: 'pm-gantt-bar'
+    class: `pm-gantt-bar${criticalInfo?.highlight && criticalInfo.critical ? ' pm-gantt-bar--critical' : ''}`
   })
   barGroup.appendChild(rect)
 
@@ -178,6 +196,9 @@ export function drawTaskBar(
   ]
   if (task.assignees.length) {
     lines.push(t('gantt.tooltipAssignees', { names: task.assignees.map(displayName).join(', ') }))
+  }
+  if (criticalInfo) {
+    lines.push(formatSlackTooltip(criticalInfo))
   }
   tooltip.textContent = lines.join('\n')
   rect.appendChild(tooltip)
@@ -275,23 +296,34 @@ export function drawMilestoneDiamond(
   canvas: GanttCanvas,
   task: Task,
   row: number,
-  color: string
+  color: string,
+  criticalInfo?: BarCriticalInfo
 ): SVGPolygonElement | null {
   const date = parsePlainDate(task.due) ?? parsePlainDate(task.start)
   if (!date) return null
   const cx = dateToX(canvas.cfg, date) + canvas.cfg.dayWidth / 2
   const cy = HEADER_HEIGHT + row * ROW_HEIGHT + ROW_HEIGHT / 2
   const size = 12
+  const highlightClass = criticalInfo?.highlight
+    ? criticalInfo.critical
+      ? ' pm-gantt-milestone--critical'
+      : ' pm-gantt-milestone--dimmed'
+    : ''
   const diamond = svgEl('polygon', {
     points: `${cx},${cy - size} ${cx + size},${cy} ${cx},${cy + size} ${cx - size},${cy}`,
     fill: color,
     opacity: 0.8,
-    class: 'pm-gantt-milestone',
+    class: `pm-gantt-milestone${highlightClass}`,
     cursor: 'pointer'
   })
   g.appendChild(diamond)
   const tooltip = svgEl('title', {})
-  tooltip.textContent = `${t('gantt.milestoneTitle', { title: task.title })}\n${t('gantt.tooltipDate', { date: task.due || task.start || '—' })}`
+  const lines = [
+    t('gantt.milestoneTitle', { title: task.title }),
+    t('gantt.tooltipDate', { date: task.due || task.start || '—' })
+  ]
+  if (criticalInfo) lines.push(formatSlackTooltip(criticalInfo))
+  tooltip.textContent = lines.join('\n')
   diamond.appendChild(tooltip)
   return diamond
 }
@@ -337,7 +369,11 @@ export function drawMilestoneLabels(
   canvas.svgEl.appendChild(linesG)
 }
 
-export function drawDependencyArrows(canvas: GanttCanvas, rows: GanttRow[]): void {
+export function drawDependencyArrows(
+  canvas: GanttCanvas,
+  rows: GanttRow[],
+  criticalEdges?: ReadonlySet<string>
+): void {
   const byId = new Map<string, { row: number; task: Task }>()
   rows.forEach((entry, i) => byId.set(entry.task.id, { row: entry.row ?? i, task: entry.task }))
 
@@ -349,23 +385,29 @@ export function drawDependencyArrows(canvas: GanttCanvas, rows: GanttRow[]): voi
     const to = byId.get(task.id)
     if (!to) continue
     const toY = HEADER_HEIGHT + to.row * ROW_HEIGHT + ROW_HEIGHT / 2
-    const taskStart = parsePlainDate(task.start)
+    const taskStart = parsePlainDate(task.start) ?? (task.type === 'milestone' ? parsePlainDate(task.due) : null)
     if (!taskStart) continue
     const toX = dateToX(canvas.cfg, taskStart)
 
     for (const depId of task.dependencies) {
       const from = byId.get(depId)
       if (!from) continue
-      const depDue = parsePlainDate(from.task.due)
+      const depDue = parsePlainDate(from.task.due) ?? parsePlainDate(from.task.start)
       if (!depDue) continue
       const fromX = dateToX(canvas.cfg, depDue.add({ days: 1 }))
       const fromY = HEADER_HEIGHT + from.row * ROW_HEIGHT + ROW_HEIGHT / 2
       const midX = (fromX + toX) / 2
+      const isCritical = criticalEdges ? criticalEdges.has(`${depId}->${task.id}`) : false
+      const cls = criticalEdges
+        ? isCritical
+          ? 'pm-gantt-arrow pm-gantt-arrow--critical'
+          : 'pm-gantt-arrow pm-gantt-arrow--dimmed'
+        : 'pm-gantt-arrow'
       arrowGroup.appendChild(
         svgEl('path', {
           d: `M ${fromX} ${fromY} C ${midX} ${fromY}, ${midX} ${toY}, ${toX} ${toY}`,
-          class: 'pm-gantt-arrow',
-          'marker-end': 'url(#pm-arrowhead)'
+          class: cls,
+          'marker-end': isCritical ? 'url(#pm-arrowhead-critical)' : 'url(#pm-arrowhead)'
         })
       )
     }
@@ -373,16 +415,20 @@ export function drawDependencyArrows(canvas: GanttCanvas, rows: GanttRow[]): voi
 
   const defs =
     canvas.svgEl.querySelector('defs') ?? canvas.svgEl.insertBefore(svgEl('defs', {}), canvas.svgEl.firstChild)
-  const marker = svgEl('marker', {
-    id: 'pm-arrowhead',
-    markerWidth: 8,
-    markerHeight: 8,
-    refX: 6,
-    refY: 3,
-    orient: 'auto'
-  })
-  marker.appendChild(svgEl('path', { d: 'M0,0 L0,6 L8,3 z', class: 'pm-gantt-arrowhead' }))
-  defs.appendChild(marker)
+  const addMarker = (id: string, cls: string) => {
+    const m = svgEl('marker', {
+      id,
+      markerWidth: 8,
+      markerHeight: 8,
+      refX: 6,
+      refY: 3,
+      orient: 'auto'
+    })
+    m.appendChild(svgEl('path', { d: 'M0,0 L0,6 L8,3 z', class: cls }))
+    defs.appendChild(m)
+  }
+  addMarker('pm-arrowhead', 'pm-gantt-arrowhead')
+  if (criticalEdges) addMarker('pm-arrowhead-critical', 'pm-gantt-arrowhead pm-gantt-arrowhead--critical')
 
   canvas.svgEl.appendChild(arrowGroup)
 }

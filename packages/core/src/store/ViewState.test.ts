@@ -66,6 +66,12 @@ describe('viewDifferences', () => {
     expect(viewDifferences(saved, state({ nonWorkingDays: { weekends: true } }))).toEqual(['days'])
   })
 
+  it('compares showCriticalPath only when the view saved it', () => {
+    expect(viewDifferences(view, state({ showCriticalPath: true }))).toEqual([])
+    const saved: SavedView = { ...view, showCriticalPath: false }
+    expect(viewDifferences(saved, state({ showCriticalPath: true }))).toEqual(['critical'])
+  })
+
   it('does not care about a mode or scale the view never named', () => {
     const loose: SavedView = { ...view, viewMode: undefined, ganttGranularity: undefined }
     expect(viewDifferences(loose, state({ mode: 'gantt', granularity: 'year' }))).toEqual([])

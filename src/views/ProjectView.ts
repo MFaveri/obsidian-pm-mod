@@ -133,7 +133,7 @@ const sortFields = (config?: ResolvedProjectConfig): SortField[] => [
 
 /** One of a mode's own controls, as the options slot, the Tune list and the More menu draw it. */
 interface ViewOption {
-  id: 'today' | 'scale' | 'days' | 'collapse'
+  id: 'today' | 'scale' | 'days' | 'critical' | 'collapse'
   icon: string
   label: string
   /** The current value: the Tune list's faint state, and the chip's text when `chip` is `value`. */
@@ -163,6 +163,7 @@ export class ProjectView extends ItemView {
   group: GroupState = makeDefaultGroup()
   fields: ViewFields = {}
   nonWorkingDays: NonWorkingDays = {}
+  showCriticalPath = false
   /** Percent of the scale's day width. Kept per device, not in the view. */
   zoom = 100
   granularity: GanttGranularity
@@ -181,6 +182,7 @@ export class ProjectView extends ItemView {
   private fieldsButton: ChipButton | null = null
   private zoomStepper: Stepper | null = null
   private daysButton: ChipButton | null = null
+  private criticalButton: ChipButton | null = null
   private keyScope: Scope
   private pendingRefresh: Promise<void> | null = null
   private initialized = false
@@ -401,6 +403,7 @@ export class ProjectView extends ItemView {
       this.fields = saved.fields
       this.granularity = saved.ganttGranularity
       this.nonWorkingDays = saved.nonWorkingDays
+      this.showCriticalPath = saved.showCriticalPath === true
       return
     }
     this.query.filter = makeDefaultFilter()
@@ -409,6 +412,7 @@ export class ProjectView extends ItemView {
     this.group = makeDefaultGroup()
     this.fields = structuredClone(this.plugin.settings.defaultFields)
     this.nonWorkingDays = {}
+    this.showCriticalPath = false
     this.granularity = this.plugin.settings.ganttGranularity
     // A scope seen for the first time opens with its starred view, and keeps it from then on.
     const starred = this.savedViews().find((view) => view.isDefault)
@@ -426,6 +430,7 @@ export class ProjectView extends ItemView {
     if (view.fields) this.fields = structuredClone(view.fields)
     if (view.ganttGranularity) this.granularity = view.ganttGranularity
     if (view.nonWorkingDays) this.nonWorkingDays = structuredClone(view.nonWorkingDays)
+    if (view.showCriticalPath !== undefined) this.showCriticalPath = view.showCriticalPath
     if (view.viewMode) this.currentView = view.viewMode
   }
 
@@ -444,7 +449,8 @@ export class ProjectView extends ItemView {
       fields: t('header.changedFields'),
       mode: t('header.mode'),
       scale: t('header.scale'),
-      days: t('header.changedDays')
+      days: t('header.changedDays'),
+      critical: t('header.changedCritical')
     }
     const state = {
       filter: this.query.filter,
@@ -453,7 +459,8 @@ export class ProjectView extends ItemView {
       fields: this.fields,
       mode: this.currentView,
       granularity: this.granularity,
-      nonWorkingDays: this.nonWorkingDays
+      nonWorkingDays: this.nonWorkingDays,
+      showCriticalPath: this.showCriticalPath
     }
     return viewDifferences(active, state).map((part) => labels[part])
   }
@@ -467,7 +474,8 @@ export class ProjectView extends ItemView {
       group: this.group,
       fields: this.fields,
       ganttGranularity: this.granularity,
-      nonWorkingDays: this.nonWorkingDays
+      nonWorkingDays: this.nonWorkingDays,
+      showCriticalPath: this.showCriticalPath
     }
     await this.plugin.saveSettings()
   }
@@ -556,6 +564,7 @@ export class ProjectView extends ItemView {
     }
     this.zoomStepper?.setValue(`${this.zoom}%`, this.zoom <= MIN_ZOOM, this.zoom >= MAX_ZOOM)
     this.daysButton?.setActive(!!this.nonWorkingDays.weekends || !!this.nonWorkingDays.holidays)
+    this.criticalButton?.setActive(this.showCriticalPath)
     if (this.sortButton) syncSortButton(this.sortButton, this.sortSummary())
     this.header?.fit()
   }
@@ -1148,6 +1157,7 @@ export class ProjectView extends ItemView {
   private renderOptionsSlot(parent: HTMLElement, scope: ProjectScope): void {
     this.zoomStepper = null
     this.daysButton = null
+    this.criticalButton = null
     for (const option of this.viewOptions(scope)) {
       if (option === 'zoom') {
         this.zoomStepper = new Stepper(parent, this.zoomProps())
@@ -1159,6 +1169,7 @@ export class ProjectView extends ItemView {
       if (option.chip === 'icon') chip.setTooltip(option.label)
       chip.onClick(() => option.run(chip.el))
       if (option.id === 'days') this.daysButton = chip
+      if (option.id === 'critical') this.criticalButton = chip
     }
   }
 
@@ -1193,6 +1204,13 @@ export class ProjectView extends ItemView {
           label: t('timeline.nonWorkingDays'),
           chip: 'icon',
           run: (anchor) => this.openNonWorkingDays(anchor)
+        },
+        {
+          id: 'critical',
+          icon: 'route',
+          label: t('gantt.criticalPath'),
+          chip: 'icon',
+          run: () => this.toggleCriticalPath()
         }
       )
     }
@@ -1215,6 +1233,13 @@ export class ProjectView extends ItemView {
 
   private scrollToToday(): void {
     if (this.subview instanceof GanttView) this.subview.scrollToToday()
+  }
+
+  private toggleCriticalPath(): void {
+    this.showCriticalPath = !this.showCriticalPath
+    this.syncHeader()
+    this.renderCurrentView()
+    void this.persistFilter()
   }
 
   private openScaleMenu(anchor: HTMLElement): void {
@@ -1416,6 +1441,7 @@ export class ProjectView extends ItemView {
       viewMode: this.currentView,
       ganttGranularity: this.granularity,
       nonWorkingDays: structuredClone(this.nonWorkingDays),
+      showCriticalPath: this.showCriticalPath,
       ...(isDefault ? { isDefault: true } : {})
     }
     this.activeSavedViewId = sv.id
@@ -1436,6 +1462,7 @@ export class ProjectView extends ItemView {
     sv.fields = structuredClone(this.fields)
     sv.ganttGranularity = this.granularity
     sv.nonWorkingDays = structuredClone(this.nonWorkingDays)
+    sv.showCriticalPath = this.showCriticalPath
     this.activeSavedViewId = sv.id
     await this.persistSavedViews(views)
     void this.persistFilter()
@@ -1555,6 +1582,7 @@ export class ProjectView extends ItemView {
           this.fields,
           this.zoom,
           this.nonWorkingDays,
+          this.showCriticalPath,
           (zoom) => {
             this.zoom = zoom
             this.rememberZoom()

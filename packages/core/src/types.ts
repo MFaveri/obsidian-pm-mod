@@ -258,6 +258,7 @@ export interface SavedView {
   viewMode?: ViewMode
   ganttGranularity?: GanttGranularity
   nonWorkingDays?: NonWorkingDays
+  showCriticalPath?: boolean
   /** The view a scope opens with. At most one per scope. */
   isDefault?: boolean
 }
@@ -274,6 +275,7 @@ export interface PerProjectFilter {
   fields: ViewFields
   ganttGranularity: GanttGranularity
   nonWorkingDays: NonWorkingDays
+  showCriticalPath?: boolean
 }
 
 export interface StatusConfig {

@@ -24,6 +24,16 @@
   width: 100%;
 }
 
+.pm-replace-dates {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.pm-replace-dates .pm-replace-field {
+  margin-top: 0;
+}
+
 .pm-replace-checkbox {
   align-items: center;
   display: flex;

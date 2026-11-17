@@ -396,6 +396,18 @@ describe('project round-trip', () => {
     expect(project.savedViews[0].nonWorkingDays).toEqual({ weekends: true })
   })
 
+  it('reads saved showCriticalPath booleans and ignores non-boolean values', () => {
+    const fm = {
+      savedViews: [
+        { id: 'v1', name: 'Crit', showCriticalPath: true },
+        { id: 'v2', name: 'Bad', showCriticalPath: 'yes' }
+      ]
+    }
+    const project = hydrateProjectFromFrontmatter(fm, '', 'Projects/P.md', 'P')
+    expect(project.savedViews[0].showCriticalPath).toBe(true)
+    expect(project.savedViews[1].showCriticalPath).toBeUndefined()
+  })
+
   it('drops a timeline scale it does not know', () => {
     const fm = { savedViews: [{ id: 'v1', name: 'Odd', ganttGranularity: 'decade' }] }
     const project = hydrateProjectFromFrontmatter(fm, '', 'Projects/P.md', 'P')

@@ -18,9 +18,10 @@ export interface ViewState {
   mode: ViewMode
   granularity: GanttGranularity
   nonWorkingDays: NonWorkingDays
+  showCriticalPath?: boolean
 }
 
-export type ViewPart = 'filter' | 'sort' | 'group' | 'fields' | 'mode' | 'scale' | 'days'
+export type ViewPart = 'filter' | 'sort' | 'group' | 'fields' | 'mode' | 'scale' | 'days' | 'critical'
 
 /** JSON with object keys in a fixed order, so two equal values always compare equal. */
 function stable(value: unknown): string {
@@ -48,6 +49,9 @@ export function viewDifferences(view: SavedView, state: ViewState): ViewPart[] {
   if (view.viewMode && view.viewMode !== state.mode) parts.push('mode')
   if (view.ganttGranularity && view.ganttGranularity !== state.granularity) parts.push('scale')
   if (view.nonWorkingDays && !sameValue(view.nonWorkingDays, state.nonWorkingDays)) parts.push('days')
+  if (view.showCriticalPath !== undefined && view.showCriticalPath !== Boolean(state.showCriticalPath)) {
+    parts.push('critical')
+  }
   return parts
 }
 

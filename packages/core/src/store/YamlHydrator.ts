@@ -216,6 +216,7 @@ export function hydrateSavedViews(raw: unknown[]): SavedView[] {
         ...(validViewMode ? { viewMode: validViewMode } : {}),
         ...(granularity ? { ganttGranularity: granularity } : {}),
         ...(v.nonWorkingDays ? { nonWorkingDays: hydrateNonWorkingDays(v.nonWorkingDays) } : {}),
+        ...(typeof v.showCriticalPath === 'boolean' ? { showCriticalPath: v.showCriticalPath } : {}),
         ...(v.isDefault === true ? { isDefault: true } : {})
       }
     })

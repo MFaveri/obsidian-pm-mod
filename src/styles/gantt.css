@@ -105,6 +105,28 @@
   margin-right: 8px;
 }
 
+.pm-gantt-label-row--critical {
+  box-shadow:
+    inset 3px 0 0 var(--color-red),
+    inset 0 -1px 0 var(--background-modifier-border);
+}
+
+.pm-gantt-label-slack {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 1px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  background: var(--background-modifier-hover);
+}
+
+.pm-gantt-label-slack--critical {
+  color: var(--color-red);
+  background: color-mix(in srgb, var(--color-red) 14%, transparent);
+}
+
 .pm-gantt-project-row {
   background: var(--background-secondary-alt, var(--background-secondary));
   font-weight: 600;
@@ -308,7 +330,37 @@
   stroke-dasharray: 4 3;
   opacity: 0.4;
 }
+.pm-gantt-arrow--dimmed {
+  opacity: 0.18;
+}
+.pm-gantt-arrow--critical {
+  stroke: var(--color-red);
+  stroke-width: 2;
+  stroke-dasharray: none;
+  opacity: 0.9;
+}
 .pm-gantt-arrowhead {
   fill: var(--interactive-accent);
   opacity: 0.5;
+}
+.pm-gantt-arrowhead--critical {
+  fill: var(--color-red);
+  opacity: 0.95;
+}
+
+.pm-gantt-bar-group--dimmed {
+  opacity: 0.42;
+}
+.pm-gantt-bar--critical {
+  stroke: var(--color-red);
+  stroke-width: 2;
+  opacity: 0.65;
+}
+.pm-gantt-milestone--dimmed {
+  opacity: 0.35;
+}
+.pm-gantt-milestone--critical {
+  stroke: var(--color-red);
+  stroke-width: 2;
+  opacity: 1;
 }
