@@ -5,6 +5,8 @@ import { svgEl } from '#dom'
 import { buildTimelineConfig, HEADER_HEIGHT, ROW_HEIGHT } from './TimelineConfig'
 import type { GanttCanvas } from './canvas'
 import { drawDependencyArrows, drawMilestoneDiamond, drawSummaryBar, drawTaskBar } from './bars'
+import { renderGridLines } from './canvas'
+import { renderTimelineHeader } from './header'
 
 function makeCanvas(tasks = [makeTask({ id: 'a', start: '2026-04-01', due: '2026-04-10' })]): GanttCanvas {
   const svg = svgEl('svg', { width: 800, height: 400 })
@@ -187,5 +189,26 @@ describe('baseline drawing', () => {
     expect(bar?.rect.querySelector('title')?.textContent).toContain('+2d')
     expect(barsG.querySelector('.pm-gantt-baseline-milestone--ahead')).not.toBeNull()
     expect(barsG.querySelectorAll('.pm-gantt-baseline-bar')).toHaveLength(2)
+  })
+})
+
+describe('calendar day shading', () => {
+  it('shades time-off, off-week, and extra-working days distinctly in grid and header', () => {
+    const tasks = [makeTask({ id: 'a', start: '2026-11-18', due: '2026-11-24' })]
+    const canvas = makeCanvas(tasks)
+    canvas.dayKind = (d) => {
+      const iso = d.toString()
+      if (iso === '2026-11-18') return 'time-off'
+      if (iso === '2026-11-21') return 'extra-working'
+      return d.dayOfWeek >= 6 ? 'off-week' : 'working'
+    }
+
+    renderTimelineHeader(canvas)
+    renderGridLines(canvas, 2)
+
+    expect(canvas.svgEl.querySelectorAll('.pm-gantt-timeoff').length).toBeGreaterThanOrEqual(1)
+    expect(canvas.svgEl.querySelectorAll('.pm-gantt-extra-workday').length).toBeGreaterThanOrEqual(1)
+    expect(canvas.headerSvgEl.querySelectorAll('.pm-gantt-timeoff-header').length).toBeGreaterThanOrEqual(1)
+    expect(canvas.headerSvgEl.querySelectorAll('.pm-gantt-extra-workday-header').length).toBeGreaterThanOrEqual(1)
   })
 })

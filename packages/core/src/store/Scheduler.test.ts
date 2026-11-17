@@ -6,6 +6,7 @@ import {
   computeCriticalPath,
   computeSchedule,
   daysBetween,
+  expandDateRangeOverrides,
   wouldCreateCycle
 } from './Scheduler'
 
@@ -574,5 +575,30 @@ describe('computeBaselineVariance', () => {
       startDeltaDays: -2,
       dueDeltaDays: -2
     })
+  })
+})
+
+describe('expandDateRangeOverrides', () => {
+  it('returns a single date verbatim even if it falls on a weekend or weekday', () => {
+    expect(expandDateRangeOverrides('2026-11-21', '', 'extraWorkdays')).toEqual(['2026-11-21'])
+    expect(expandDateRangeOverrides('2026-11-22', '2026-11-22', 'extraNonWorkdays')).toEqual(['2026-11-22'])
+  })
+
+  it('expands a vacation range into working days only, skipping weekends and holidays', () => {
+    // Mon 2026-12-21 .. Sun 2026-12-27 with Fri 2026-12-25 holiday -> Mon..Thu only.
+    expect(
+      expandDateRangeOverrides('2026-12-21', '2026-12-27', 'extraNonWorkdays', {
+        workingWeekdays: [1, 2, 3, 4, 5],
+        holidays: ['2026-12-25']
+      })
+    ).toEqual(['2026-12-21', '2026-12-22', '2026-12-23', '2026-12-24'])
+  })
+
+  it('expands an extra-workdays range into weekend/holiday days and tolerates reversed bounds', () => {
+    expect(
+      expandDateRangeOverrides('2026-11-23', '2026-11-20', 'extraWorkdays', {
+        workingWeekdays: [1, 2, 3, 4, 5]
+      })
+    ).toEqual(['2026-11-21', '2026-11-22'])
   })
 })

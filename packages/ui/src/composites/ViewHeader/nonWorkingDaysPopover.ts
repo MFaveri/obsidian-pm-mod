@@ -11,10 +11,16 @@ export interface NonWorkingDaysProps {
   holidays: string[]
   onChange: () => void
   onHolidaysChange: (holidays: string[]) => void
+  /** Optional link to open the active project's schedule settings. */
+  onOpenProjectCalendar?: () => void
 }
 
 /** Whether the timeline leaves out weekends and holidays, and the holiday list itself. */
-export function renderNonWorkingDaysPanel(parent: HTMLElement, props: NonWorkingDaysProps): void {
+export function renderNonWorkingDaysPanel(
+  parent: HTMLElement,
+  props: NonWorkingDaysProps,
+  close?: () => void
+): void {
   const body = parent.createDiv('pm-days-pop')
   const { days } = props
   let holidays = [...props.holidays]
@@ -64,6 +70,18 @@ export function renderNonWorkingDaysPanel(parent: HTMLElement, props: NonWorking
     list = body.createDiv('pm-days-list')
     renderList()
     body.createDiv({ cls: 'pm-days-note', text: t('timeline.holidaysNote') })
+    if (props.onOpenProjectCalendar) {
+      const openProject = props.onOpenProjectCalendar
+      const link = body.createEl('button', {
+        type: 'button',
+        cls: 'pm-days-project-link',
+        text: t('timeline.configureProjectDays')
+      })
+      link.addEventListener('click', () => {
+        close?.()
+        openProject()
+      })
+    }
   }
 
   const renderList = (): void => {
@@ -93,5 +111,7 @@ export function renderNonWorkingDaysPanel(parent: HTMLElement, props: NonWorking
 }
 
 /** The non-working days panel in a popover under `anchor`. */
-export const openNonWorkingDaysPopover = (anchor: HTMLElement, props: NonWorkingDaysProps): Popover =>
-  Popover.show({ anchor, width: 280 }, (el) => renderNonWorkingDaysPanel(el, props))
+export const openNonWorkingDaysPopover = (anchor: HTMLElement, props: NonWorkingDaysProps): Popover => {
+  const pop = Popover.show({ anchor, width: 280 }, (el) => renderNonWorkingDaysPanel(el, props, () => pop.close()))
+  return pop
+}

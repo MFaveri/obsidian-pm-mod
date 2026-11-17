@@ -1,4 +1,4 @@
-import type { GanttCanvas } from './canvas'
+import { classifyDay, type GanttCanvas, type GanttDayKind } from './canvas'
 import { HEADER_HEIGHT, dateToX, dayX, getWeekNumber, isHiddenDay } from './TimelineConfig'
 import { svgEl } from '#dom'
 import { Temporal, type GanttWeekLabel, formatDateRange, locale, t } from '@dotpm/core'
@@ -33,6 +33,12 @@ export function renderTimelineHeader(ctx: GanttCanvas): void {
   ctx.headerSvgEl.appendChild(g)
 }
 
+const HEADER_SHADE_CLASS: Record<Exclude<GanttDayKind, 'working'>, string> = {
+  'off-week': 'pm-gantt-weekend-header',
+  'time-off': 'pm-gantt-timeoff-header',
+  'extra-working': 'pm-gantt-extra-workday-header'
+}
+
 function renderDayHeader(g: SVGGElement, ctx: GanttCanvas): void {
   const { startDate, totalDays, dayWidth } = ctx.cfg
   renderMonthBands(g, 0, 24, ctx)
@@ -40,15 +46,15 @@ function renderDayHeader(g: SVGGElement, ctx: GanttCanvas): void {
     if (isHiddenDay(ctx.cfg, i)) continue
     const d = startDate.add({ days: i })
     const x = dayX(ctx.cfg, i)
-    const isWeekend = d.dayOfWeek === 6 || d.dayOfWeek === 7
-    if (isWeekend) {
+    const kind = classifyDay(ctx, d)
+    if (kind !== 'working') {
       g.appendChild(
         svgEl('rect', {
           x,
           y: 24,
           width: dayWidth,
           height: HEADER_HEIGHT - 24,
-          class: 'pm-gantt-weekend-header'
+          class: HEADER_SHADE_CLASS[kind]
         })
       )
     }

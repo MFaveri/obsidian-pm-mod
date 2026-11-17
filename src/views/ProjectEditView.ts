@@ -12,10 +12,10 @@ import {
   DEFAULT_PALETTE_COLOR,
   DEFAULT_WORKING_WEEKDAYS,
   Temporal,
+  expandDateRangeOverrides,
   formatDate,
   locale,
   makeId,
-  parsePlainDate,
   priorityIconSetLabels,
   collectAllAssignees,
   flattenTasks,
@@ -506,27 +506,37 @@ export class ProjectEditView extends ItemView {
     renderPropRow(props, spec.label, () => {
       const cell = createDiv('pm-prop-value pm-extra-workdays')
       const controls = cell.createDiv('pm-extra-workdays-controls')
-      const input = controls.createEl('input', { type: 'date', cls: 'pm-input pm-extra-workdays-input' })
+      const startInput = controls.createEl('input', { type: 'date', cls: 'pm-input pm-extra-workdays-input' })
+      controls.createSpan({ cls: 'pm-extra-workdays-sep', text: t('projectEdit.dateRangeTo') })
+      const endInput = controls.createEl('input', { type: 'date', cls: 'pm-input pm-extra-workdays-input' })
       const addBtn = new ButtonComponent(controls).setButtonText(spec.addLabel)
+      const resolved = this.plugin.store.configFor(project)
       addBtn.onClick(() => {
-        const iso = input.value.trim()
-        if (!iso || !parsePlainDate(iso)) return
+        const added = expandDateRangeOverrides(startInput.value.trim(), endInput.value.trim(), spec.key, {
+          workingWeekdays: resolved.workingWeekdays,
+          holidays: this.plugin.settings.holidays
+        })
+        if (!added.length) return
+        const addedSet = new Set(added)
         const opposite = project.config?.[spec.oppositeKey] ?? []
-        if (opposite.includes(iso)) {
-          const pruned = opposite.filter((d) => d !== iso)
-          this.patchConfig(spec.oppositeKey, pruned.length ? pruned : undefined)
+        const prunedOpposite = opposite.filter((d) => !addedSet.has(d))
+        if (prunedOpposite.length !== opposite.length) {
+          this.patchConfig(spec.oppositeKey, prunedOpposite.length ? prunedOpposite : undefined)
         }
         const current = project.config?.[spec.key] ?? []
-        if (!current.includes(iso)) {
-          this.patchConfig(spec.key, [...current, iso].sort())
-          this.render()
-        } else if (opposite.includes(iso)) {
+        const merged = [...new Set([...current, ...added])].sort()
+        if (merged.length !== current.length || prunedOpposite.length !== opposite.length) {
+          this.patchConfig(spec.key, merged)
           this.render()
         }
       })
 
       const dates = project.config?.[spec.key] ?? []
       if (dates.length) {
+        new ButtonComponent(controls).setButtonText(t('projectEdit.clearAllDates')).onClick(() => {
+          this.patchConfig(spec.key, undefined)
+          this.render()
+        })
         const list = cell.createDiv('pm-extra-workdays-list')
         for (const iso of dates) {
           const chip = list.createSpan({ cls: 'pm-extra-workday-chip' })

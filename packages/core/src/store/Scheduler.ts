@@ -209,6 +209,42 @@ function buildWorkdayCalendar(options: ScheduleOptions = {}): WorkdayCalendar {
   }
 }
 
+const MAX_OVERRIDE_RANGE_DAYS = 366
+
+/**
+ * Expands a single date or inclusive date range into ISO dates to add as workday/day-off overrides.
+ * Single dates are always returned verbatim; multi-day ranges pick only active workdays for
+ * `extraNonWorkdays` (vacations/PTO) or non-working days for `extraWorkdays` (falling back to all
+ * dates in range when none match).
+ */
+export function expandDateRangeOverrides(
+  startIso: string,
+  endIso: string,
+  kind: 'extraWorkdays' | 'extraNonWorkdays',
+  options: ScheduleOptions = {}
+): string[] {
+  const rawStart = parsePlainDate(startIso)
+  if (!rawStart) return []
+  const rawEnd = parsePlainDate(endIso || startIso) ?? rawStart
+  const [from, to] = Temporal.PlainDate.compare(rawStart, rawEnd) <= 0 ? [rawStart, rawEnd] : [rawEnd, rawStart]
+  if (Temporal.PlainDate.compare(from, to) === 0) return [from.toString()]
+
+  const calendar = buildWorkdayCalendar({ ...options, workdaysOnly: true })
+  const all: string[] = []
+  const matched: string[] = []
+  let cur = from
+  for (let i = 0; i < MAX_OVERRIDE_RANGE_DAYS && Temporal.PlainDate.compare(cur, to) <= 0; i++) {
+    const iso = cur.toString()
+    all.push(iso)
+    const working = isWorkingDay(cur, calendar)
+    if ((kind === 'extraNonWorkdays' && working) || (kind === 'extraWorkdays' && !working)) {
+      matched.push(iso)
+    }
+    cur = cur.add({ days: 1 })
+  }
+  return matched.length ? matched : all
+}
+
 interface DependencyGraph {
   taskById: Map<string, Task>
   predecessorsOf: Map<string, string[]>

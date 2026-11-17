@@ -780,6 +780,21 @@ input.pm-days-input {
   font-size: var(--font-ui-smaller);
   white-space: normal;
 }
+.pm-days-project-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 9px;
+  border: none;
+  border-top: 1px solid var(--background-modifier-border);
+  background: transparent;
+  color: var(--interactive-accent);
+  font-size: var(--font-ui-smaller);
+  cursor: pointer;
+}
+.pm-days-project-link:hover {
+  background: var(--background-modifier-hover);
+}
 .pm-vh--phone .pm-vh-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;

@@ -23,6 +23,7 @@ import {
   drawRowHover,
   renderAddButton,
   svgEl,
+  type GanttDayKind,
   type TimelineCfg,
   buildTimelineConfig,
   clampZoom,
@@ -429,11 +430,31 @@ export class GanttView implements SubView {
   }
 
   private makeRendererContext(): RendererContext {
+    const extraWorkdaySet = new Set(
+      this.scope.projects.flatMap((p) => this.plugin.store.configFor(p).extraWorkdays)
+    )
+    const extraNonWorkdaySet = new Set(
+      this.scope.projects.flatMap((p) => this.plugin.store.configFor(p).extraNonWorkdays)
+    )
+    const holidaySet = new Set(this.plugin.settings.holidays)
+    const primaryWeekdays = !this.scope.isMulti && this.scope.primary
+      ? this.plugin.store.configFor(this.scope.primary).workingWeekdays
+      : this.plugin.settings.workingWeekdays
+    const weekdaySet = new Set(primaryWeekdays)
+    const dayKind = (date: Temporal.PlainDate): GanttDayKind => {
+      const iso = date.toString()
+      if (extraNonWorkdaySet.has(iso)) return 'time-off'
+      if (extraWorkdaySet.has(iso)) return 'extra-working'
+      if (holidaySet.has(iso)) return 'time-off'
+      return weekdaySet.has(date.dayOfWeek) ? 'working' : 'off-week'
+    }
+
     return {
       svgEl: this.svgEl,
       headerSvgEl: this.headerSvgEl,
       cfg: this.cfg,
       weekLabel: this.plugin.settings.ganttWeekLabel,
+      dayKind,
       plugin: this.plugin,
       scope: this.scope,
       statuses: this.scope.config.statuses,

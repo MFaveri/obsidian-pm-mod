@@ -260,6 +260,12 @@
 .theme-dark .pm-gantt-weekend-header {
   fill: rgba(255, 255, 255, 0.04);
 }
+.pm-gantt-timeoff-header {
+  fill: color-mix(in srgb, var(--color-orange, var(--color-red)) 12%, transparent);
+}
+.pm-gantt-extra-workday-header {
+  fill: color-mix(in srgb, var(--color-green) 11%, transparent);
+}
 
 .pm-gantt-gridline-v {
   stroke: var(--background-modifier-border);
@@ -275,6 +281,12 @@
 }
 .theme-dark .pm-gantt-weekend {
   fill: rgba(255, 255, 255, 0.025);
+}
+.pm-gantt-timeoff {
+  fill: color-mix(in srgb, var(--color-orange, var(--color-red)) 7%, transparent);
+}
+.pm-gantt-extra-workday {
+  fill: color-mix(in srgb, var(--color-green) 6%, transparent);
 }
 
 .pm-gantt-row-hover {

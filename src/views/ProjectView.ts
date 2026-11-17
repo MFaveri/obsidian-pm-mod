@@ -1376,6 +1376,7 @@ export class ProjectView extends ItemView {
   }
 
   private openNonWorkingDays(anchor: HTMLElement): void {
+    const primary = this.projectScope && !this.projectScope.isMulti ? this.projectScope.primary : null
     openNonWorkingDaysPopover(anchor, {
       days: this.nonWorkingDays,
       holidays: this.plugin.settings.holidays,
@@ -1384,7 +1385,12 @@ export class ProjectView extends ItemView {
         this.plugin.settings.holidays = holidays
         await this.plugin.saveSettings()
         if (this.nonWorkingDays.holidays) this.renderCurrentView()
-      })
+      }),
+      ...(primary
+        ? {
+            onOpenProjectCalendar: safeAsync(() => this.plugin.router.openProjectEdit(primary.filePath, this.leaf))
+          }
+        : {})
     })
   }
 
