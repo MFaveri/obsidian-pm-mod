@@ -2,3 +2,22 @@ node_modules/
 main.js
 styles.css
 packages/*/dist/
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Logs and caches
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.eslintcache
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+.obsidian/

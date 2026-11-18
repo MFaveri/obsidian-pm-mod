@@ -1,8 +1,8 @@
 {
-  "name": "project-manager",
-  "version": "2.6.0",
-  "description": "Project management inside Obsidian. Table, Gantt and Kanban over plain Markdown notes, with a local API for agents and scripts.",
-  "repository": "github:dotpm/obsidian-pm",
+  "name": "pm-workbench",
+  "version": "1.0.0",
+  "description": "Personal spin-off of dotpm for Obsidian: Markdown project management with Table, Gantt, Kanban, CPM, Baseline, Dependencies & Workload.",
+  "repository": "github:MFaveri/obsidian-pm-mod",
   "type": "module",
   "main": "main.js",
   "imports": {
