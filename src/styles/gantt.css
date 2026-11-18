@@ -425,3 +425,35 @@
 .pm-gantt-tooltip-line {
   color: var(--text-muted);
 }
+
+.pm-gantt-bar--duration-risk {
+  stroke: var(--color-orange, var(--color-red));
+  stroke-width: 2;
+}
+.pm-gantt-duration-overflow {
+  fill: var(--color-orange, var(--color-red));
+  fill-opacity: 0.16;
+  stroke: var(--color-orange, var(--color-red));
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+.pm-gantt-arrow-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 12;
+  cursor: pointer;
+}
+.pm-gantt-arrow-badge {
+  font-size: 10px;
+  font-weight: 600;
+  fill: var(--interactive-accent);
+  paint-order: stroke;
+  stroke: var(--background-primary);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.pm-gantt-arrow-badge--critical {
+  fill: var(--color-red);
+}

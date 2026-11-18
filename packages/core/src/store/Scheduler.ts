@@ -1,7 +1,47 @@
 import { Temporal, parsePlainDate } from '../dates'
-import { DEFAULT_WORKING_WEEKDAYS, type StatusConfig, type Task } from '../types'
+import {
+  DEFAULT_WORKING_WEEKDAYS,
+  getDependencySpec,
+  type DependencyType,
+  type ResolvedProjectConfig,
+  type StatusConfig,
+  type Task
+} from '../types'
 import { isTerminalStatus } from '../utils'
 import { flattenTasks } from './TaskTreeOps'
+
+function edgeConstraintStart(
+  depStart: Temporal.PlainDate,
+  depDue: Temporal.PlainDate,
+  spec: { type: DependencyType; lagDays: number },
+  targetDuration: number,
+  calendar: WorkdayCalendar
+): Temporal.PlainDate {
+  if (spec.type === 'SS') {
+    return stepWorkingDays(depStart, spec.lagDays, calendar)
+  }
+  if (spec.type === 'FF') {
+    const minFinish = stepWorkingDays(depDue, spec.lagDays, calendar)
+    return targetDuration <= 1 ? minFinish : stepWorkingDays(minFinish, -(targetDuration - 1), calendar)
+  }
+  return stepWorkingDays(depDue, 1 + spec.lagDays, calendar)
+}
+
+export function scheduleOptionsFor(
+  config: Pick<
+    ResolvedProjectConfig,
+    'scheduleWorkdaysOnly' | 'workingWeekdays' | 'extraWorkdays' | 'extraNonWorkdays'
+  >,
+  holidays: string[] = []
+): ScheduleOptions {
+  return {
+    workdaysOnly: config.scheduleWorkdaysOnly,
+    workingWeekdays: config.workingWeekdays,
+    holidays,
+    extraWorkdays: config.extraWorkdays,
+    extraNonWorkdays: config.extraNonWorkdays
+  }
+}
 
 export interface SchedulePatch {
   taskId: string
@@ -363,8 +403,9 @@ export function computeSchedule(
   // Mutable copies of the dates, so a shift cascades within this run.
   const startOf = new Map<string, string>()
   const dueOf = new Map<string, string>()
-  // Days by which a task's finish beat the date it was planned for.
-  const daysSavedBy = new Map<string, number>()
+  // Working/calendar days saved on start vs finish (separately so SS isn't moved by early completion).
+  const startSavedBy = new Map<string, number>()
+  const finishSavedBy = new Map<string, number>()
   for (const t of flat) {
     startOf.set(t.id, t.start)
     dueOf.set(t.id, t.due)
@@ -373,7 +414,7 @@ export function computeSchedule(
     // the one passed here, so its status can't be re-checked from this side.
     if (!externalIds.has(t.id) && !isTerminalStatus(t.status, statuses)) continue
     dueOf.set(t.id, t.completed)
-    daysSavedBy.set(
+    finishSavedBy.set(
       t.id,
       workingDaysBetween(Temporal.PlainDate.from(t.completed), Temporal.PlainDate.from(t.due), calendar)
     )
@@ -391,34 +432,53 @@ export function computeSchedule(
     const deps = predecessorsOf.get(id) ?? []
     if (deps.length === 0) continue
 
-    // Latest due among unarchived predecessors; `latestPlannedDue` is the same
-    // date had every one of them finished on plan.
-    let latestDue = ''
-    let latestPlannedDue = ''
+    const currentStart = startOf.get(id) ?? ''
+    const currentDue = dueOf.get(id) ?? ''
+    const isMilestone = task.type === 'milestone' || (!currentStart && !!currentDue)
+    const mandatoryDuration =
+      !isMilestone && typeof task.durationDays === 'number' && Number.isFinite(task.durationDays) && task.durationDays >= 1
+        ? Math.floor(task.durationDays)
+        : 0
+    let duration = 1
+    if (!isMilestone) {
+      if (currentStart && currentDue) {
+        duration = Math.max(
+          countWorkingDaysInclusive(Temporal.PlainDate.from(currentStart), Temporal.PlainDate.from(currentDue), calendar),
+          mandatoryDuration
+        )
+      } else if (mandatoryDuration > 0) {
+        duration = mandatoryDuration
+      }
+    }
+
+    let earliestStartDate: Temporal.PlainDate | null = null
+    let plannedEarliestStartDate: Temporal.PlainDate | null = null
     for (const depId of deps) {
       const dep = taskById.get(depId)
       if (dep?.archived) continue
-      const depDue = dueOf.get(depId) || startOf.get(depId) || ''
-      if (!depDue) continue
-      if (!latestDue || depDue > latestDue) latestDue = depDue
-      const plannedDue = stepWorkingDays(
-        Temporal.PlainDate.from(depDue),
-        daysSavedBy.get(depId) ?? 0,
-        calendar
-      ).toString()
-      if (!latestPlannedDue || plannedDue > latestPlannedDue) latestPlannedDue = plannedDue
-    }
-    if (!latestDue) continue
+      const depStartStr = startOf.get(depId) || dueOf.get(depId) || ''
+      const depDueStr = dueOf.get(depId) || startOf.get(depId) || ''
+      if (!depStartStr || !depDueStr) continue
 
-    const earliestStartDate = stepWorkingDays(Temporal.PlainDate.from(latestDue), 1, calendar)
+      const spec = getDependencySpec(task, depId)
+      const depStart = Temporal.PlainDate.from(depStartStr)
+      const depDue = Temporal.PlainDate.from(depDueStr)
+      const edgeStart = edgeConstraintStart(depStart, depDue, spec, duration, calendar)
+      if (!earliestStartDate || Temporal.PlainDate.compare(edgeStart, earliestStartDate) > 0) {
+        earliestStartDate = edgeStart
+      }
+
+      const plannedDepStart = stepWorkingDays(depStart, startSavedBy.get(depId) ?? 0, calendar)
+      const plannedDepDue = stepWorkingDays(depDue, finishSavedBy.get(depId) ?? 0, calendar)
+      const plannedStart = edgeConstraintStart(plannedDepStart, plannedDepDue, spec, duration, calendar)
+      if (!plannedEarliestStartDate || Temporal.PlainDate.compare(plannedStart, plannedEarliestStartDate) > 0) {
+        plannedEarliestStartDate = plannedStart
+      }
+    }
+    if (!earliestStartDate || !plannedEarliestStartDate) continue
+
     const earliestStart = earliestStartDate.toString()
-    const daysSaved = workingDaysBetween(
-      Temporal.PlainDate.from(latestDue),
-      Temporal.PlainDate.from(latestPlannedDue),
-      calendar
-    )
-    const currentStart = startOf.get(id) ?? ''
-    const currentDue = dueOf.get(id) ?? ''
+    const daysSaved = workingDaysBetween(earliestStartDate, plannedEarliestStartDate, calendar)
 
     const pullBy = (anchor: string) =>
       Math.min(
@@ -430,8 +490,6 @@ export function computeSchedule(
     let newDue = currentDue
     let pulled = 0
 
-    const isMilestone = task.type === 'milestone' || (!currentStart && currentDue)
-
     if (isMilestone) {
       // A milestone has no span, so its due date moves instead of its start.
       if (!currentDue || currentDue < earliestStart) {
@@ -442,8 +500,6 @@ export function computeSchedule(
       }
     } else if (currentStart && currentDue) {
       const startDate = Temporal.PlainDate.from(currentStart)
-      const dueDate = Temporal.PlainDate.from(currentDue)
-      const duration = countWorkingDaysInclusive(startDate, dueDate, calendar)
       if (currentStart < earliestStart) {
         newStart = earliestStart
         newDue = stepWorkingDays(earliestStartDate, duration - 1, calendar).toString()
@@ -451,23 +507,38 @@ export function computeSchedule(
         pulled = pullBy(currentStart)
         const pulledStart = stepWorkingDays(startDate, -pulled, calendar)
         newStart = pulledStart.toString()
-        newDue = stepWorkingDays(pulledStart, duration - 1, calendar).toString()
+        const steps = isWorkingDay(pulledStart, calendar) ? duration - 1 : duration
+        newDue = stepWorkingDays(pulledStart, steps, calendar).toString()
       }
     } else if (currentStart && !currentDue) {
       if (currentStart < earliestStart) {
         newStart = earliestStart
+        if (mandatoryDuration > 0) {
+          newDue = stepWorkingDays(earliestStartDate, mandatoryDuration - 1, calendar).toString()
+        }
       } else if (daysSaved > 0) {
         pulled = pullBy(currentStart)
-        newStart = stepWorkingDays(Temporal.PlainDate.from(currentStart), -pulled, calendar).toString()
+        const pulledStart = stepWorkingDays(Temporal.PlainDate.from(currentStart), -pulled, calendar)
+        newStart = pulledStart.toString()
+        if (mandatoryDuration > 0) {
+          const steps = isWorkingDay(pulledStart, calendar) ? mandatoryDuration - 1 : mandatoryDuration
+          newDue = stepWorkingDays(pulledStart, steps, calendar).toString()
+        }
       }
     } else {
       newStart = earliestStart
+      if (mandatoryDuration > 0) {
+        newDue = stepWorkingDays(earliestStartDate, mandatoryDuration - 1, calendar).toString()
+      }
     }
 
     if (newStart !== currentStart || newDue !== currentDue) {
       startOf.set(id, newStart)
       dueOf.set(id, newDue)
-      if (pulled > 0) daysSavedBy.set(id, pulled)
+      if (pulled > 0) {
+        startSavedBy.set(id, pulled)
+        finishSavedBy.set(id, pulled)
+      }
       patches.push({ taskId: id, start: newStart, due: newDue })
     }
   }
@@ -532,15 +603,22 @@ export function computeCriticalPath(
     }
 
     const isMilestone = task.type === 'milestone' || (!task.start && !!task.due)
-    const duration = isMilestone ? 1 : countWorkingDaysInclusive(schedStart, schedDue, calendar)
+    const mandatoryDuration =
+      !isMilestone && typeof task.durationDays === 'number' && Number.isFinite(task.durationDays) && task.durationDays >= 1
+        ? Math.floor(task.durationDays)
+        : 0
+    const windowDuration = isMilestone ? 1 : countWorkingDaysInclusive(schedStart, schedDue, calendar)
+    const duration = isMilestone ? 1 : Math.max(windowDuration, mandatoryDuration)
 
     let minStartFromPreds: Temporal.PlainDate | null = null
     for (const depId of predecessorsOf.get(id) ?? []) {
       const depTask = taskById.get(depId)
       if (!depTask || depTask.archived || depTask.status === 'superseded') continue
+      const depStart = earlyStartMap.get(depId)
       const depFinish = earlyFinishMap.get(depId)
-      if (!depFinish) continue
-      const nextStart = stepWorkingDays(depFinish, 1, calendar)
+      if (!depStart || !depFinish) continue
+      const spec = getDependencySpec(task, depId)
+      const nextStart = edgeConstraintStart(depStart, depFinish, spec, duration, calendar)
       if (!minStartFromPreds || Temporal.PlainDate.compare(nextStart, minStartFromPreds) > 0) {
         minStartFromPreds = nextStart
       }
@@ -550,10 +628,18 @@ export function computeCriticalPath(
     let earlyFinish: Temporal.PlainDate
     if (minStartFromPreds && Temporal.PlainDate.compare(minStartFromPreds, schedStart) > 0) {
       earlyStart = minStartFromPreds
-      earlyFinish = duration === 1 ? earlyStart : stepWorkingDays(earlyStart, duration - 1, calendar)
+      const steps = isWorkingDay(earlyStart, calendar) ? duration - 1 : duration
+      earlyFinish = duration === 1 ? earlyStart : stepWorkingDays(earlyStart, steps, calendar)
     } else {
       earlyStart = schedStart
-      earlyFinish = isMilestone ? earlyStart : schedDue
+      if (isMilestone) {
+        earlyFinish = earlyStart
+      } else if (mandatoryDuration > windowDuration || (!parsedDue && duration > 1)) {
+        const steps = isWorkingDay(earlyStart, calendar) ? duration - 1 : duration
+        earlyFinish = stepWorkingDays(earlyStart, steps, calendar)
+      } else {
+        earlyFinish = schedDue
+      }
     }
 
     earlyStartMap.set(id, earlyStart)
@@ -576,19 +662,32 @@ export function computeCriticalPath(
 
   for (let i = activeDatedOrder.length - 1; i >= 0; i--) {
     const id = activeDatedOrder[i]
-    let minSuccLateStart: Temporal.PlainDate | null = null
+    const myDuration = durationMap.get(id) ?? 1
+    let maxFinishFromSuccs: Temporal.PlainDate | null = null
     for (const succId of dependentsOf.get(id) ?? []) {
+      const succTask = taskById.get(succId)
       const succLateStart = lateStartMap.get(succId)
-      if (!succLateStart) continue
-      if (!minSuccLateStart || Temporal.PlainDate.compare(succLateStart, minSuccLateStart) < 0) {
-        minSuccLateStart = succLateStart
+      const succLateFinish = lateFinishMap.get(succId)
+      if (!succTask || !succLateStart || !succLateFinish) continue
+      const spec = getDependencySpec(succTask, id)
+      let maxFinish: Temporal.PlainDate
+      if (spec.type === 'SS') {
+        const maxStart = stepWorkingDays(succLateStart, -spec.lagDays, calendar)
+        maxFinish = myDuration <= 1 ? maxStart : stepWorkingDays(maxStart, myDuration - 1, calendar)
+      } else if (spec.type === 'FF') {
+        maxFinish = stepWorkingDays(succLateFinish, -spec.lagDays, calendar)
+      } else {
+        maxFinish = stepWorkingDays(succLateStart, -(1 + spec.lagDays), calendar)
+      }
+      if (!maxFinishFromSuccs || Temporal.PlainDate.compare(maxFinish, maxFinishFromSuccs) < 0) {
+        maxFinishFromSuccs = maxFinish
       }
     }
 
     const earlyStart = earlyStartMap.get(id)
     const earlyFinish = earlyFinishMap.get(id)
     if (!earlyStart || !earlyFinish) continue
-    let lateFinish = minSuccLateStart ? stepWorkingDays(minSuccLateStart, -1, calendar) : projectFinishDate
+    let lateFinish = maxFinishFromSuccs ?? projectFinishDate
     const slackDays = Math.max(0, workingDaysBetween(earlyFinish, lateFinish, calendar))
 
     let lateStart: Temporal.PlainDate
@@ -638,16 +737,27 @@ export function computeCriticalPath(
   const criticalEdges: [string, string][] = []
   for (const toId of activeDatedOrder) {
     if (!criticalSet.has(toId)) continue
+    const toTask = taskById.get(toId)
     const toEarlyStart = earlyStartMap.get(toId)
-    if (!toEarlyStart) continue
+    const toEarlyFinish = earlyFinishMap.get(toId)
+    if (!toTask || !toEarlyStart || !toEarlyFinish) continue
     for (const fromId of predecessorsOf.get(toId) ?? []) {
       if (!criticalSet.has(fromId)) continue
+      const fromEarlyStart = earlyStartMap.get(fromId)
       const fromEarlyFinish = earlyFinishMap.get(fromId)
-      if (!fromEarlyFinish) continue
-      const nextAfterPred = stepWorkingDays(fromEarlyFinish, 1, calendar)
-      if (Temporal.PlainDate.compare(nextAfterPred, toEarlyStart) >= 0) {
-        criticalEdges.push([fromId, toId])
+      if (!fromEarlyStart || !fromEarlyFinish) continue
+      const spec = getDependencySpec(toTask, fromId)
+      let tight = false
+      if (spec.type === 'SS') {
+        tight = Temporal.PlainDate.compare(stepWorkingDays(fromEarlyStart, spec.lagDays, calendar), toEarlyStart) >= 0
+      } else if (spec.type === 'FF') {
+        tight =
+          Temporal.PlainDate.compare(stepWorkingDays(fromEarlyFinish, spec.lagDays, calendar), toEarlyFinish) >= 0
+      } else {
+        tight =
+          Temporal.PlainDate.compare(stepWorkingDays(fromEarlyFinish, 1 + spec.lagDays, calendar), toEarlyStart) >= 0
       }
+      if (tight) criticalEdges.push([fromId, toId])
     }
   }
 
@@ -657,5 +767,53 @@ export function computeCriticalPath(
     criticalTaskIds,
     criticalEdges,
     cycles
+  }
+}
+
+export interface DurationRisk {
+  requiredDays: number
+  availableDays: number
+  shortfallDays: number
+  projectedDue: string
+}
+
+/**
+ * Checks whether a task's scheduled `start..due` window is shorter than its mandatory `durationDays`
+ * (or lacks a `due` date when `durationDays > 1`). Returns `null` for milestones, unstarted tasks, or valid windows.
+ */
+export function computeDurationRisk(task: Task, options: ScheduleOptions = {}): DurationRisk | null {
+  if (task.type === 'milestone') return null
+  if (typeof task.durationDays !== 'number' || !Number.isFinite(task.durationDays) || task.durationDays < 1) {
+    return null
+  }
+  const startDate = parsePlainDate(task.start)
+  if (!startDate) return null
+
+  const requiredDays = Math.floor(task.durationDays)
+  const calendar = buildWorkdayCalendar(options)
+  const steps = isWorkingDay(startDate, calendar) ? requiredDays - 1 : requiredDays
+  const projectedDue = stepWorkingDays(startDate, steps, calendar).toString()
+
+  const dueDate = parsePlainDate(task.due)
+  if (!dueDate) {
+    if (requiredDays <= 1) return null
+    return {
+      requiredDays,
+      availableDays: 0,
+      shortfallDays: requiredDays,
+      projectedDue
+    }
+  }
+
+  const availableDays =
+    Temporal.PlainDate.compare(dueDate, startDate) < 0 ? 0 : countWorkingDaysInclusive(startDate, dueDate, calendar)
+  const shortfallDays = Math.max(0, requiredDays - availableDays)
+  if (shortfallDays === 0) return null
+
+  return {
+    requiredDays,
+    availableDays,
+    shortfallDays,
+    projectedDue
   }
 }

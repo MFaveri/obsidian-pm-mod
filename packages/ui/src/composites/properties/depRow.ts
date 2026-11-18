@@ -14,6 +14,7 @@ export interface DepRowProps {
   title: string
   link?: DepLink | null
   tooltip?: string
+  extra?: (row: HTMLElement) => void
   onRemove?: () => void
 }
 
@@ -32,6 +33,7 @@ export function renderDepRow(parent: HTMLElement, props: DepRowProps): HTMLEleme
     renderNoteLink(row, { label: props.title, path: link.path, open: link.open, cls: 'pm-dep-title' })
   }
   if (props.tooltip) setTooltip(row, props.tooltip)
+  props.extra?.(row)
   if (props.onRemove) {
     new IconButton(row).setIcon('x').setTooltip(t('taskForm.removeDependency')).onClick(props.onRemove)
   }

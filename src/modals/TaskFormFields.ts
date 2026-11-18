@@ -13,7 +13,13 @@ import {
   priorityIcon,
   stringToColor,
   completionOutcome,
+  computeDurationRisk,
+  formatDateShort,
+  getDependencySpec,
+  pruneDependencyLinks,
   relativeDue,
+  scheduleOptionsFor,
+  type DependencyType,
   t
 } from '@dotpm/core'
 import {
@@ -315,6 +321,52 @@ export function renderTaskFormFields(container: HTMLElement, ctx: TaskFormFields
     )
   }
 
+  if (task.type !== 'milestone') {
+    renderPropRow(
+      grid,
+      t('taskForm.durationDays'),
+      () => {
+        const cell = createDiv('pm-prop-value pm-prop-duration-cell')
+        renderInputControl({
+          container: cell,
+          value: task.durationDays !== undefined ? String(task.durationDays) : '',
+          placeholder: t('taskForm.durationDaysPlaceholder'),
+          inputType: 'number',
+          suffix: 'd',
+          number: { min: 1 },
+          onChange: (v) => {
+            const parsed = Number(v)
+            task.durationDays = v.trim() !== '' && Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : undefined
+            rerender()
+          }
+        })
+        const opts = scheduleOptionsFor(plugin.store.configFor(project), plugin.settings.holidays)
+        const risk = computeDurationRisk(task, opts)
+        if (risk) {
+          const warn = cell.createDiv('pm-duration-risk')
+          warn.createSpan({
+            text: t('taskForm.durationRisk', {
+              available: risk.availableDays,
+              required: risk.requiredDays,
+              projectedDue: formatDateShort(risk.projectedDue)
+            })
+          })
+          const adjustBtn = warn.createEl('button', {
+            cls: 'pm-duration-risk-btn',
+            text: t('taskForm.adjustDueToDuration'),
+            attr: { type: 'button' }
+          })
+          adjustBtn.addEventListener('click', () => {
+            task.due = risk.projectedDue
+            rerender()
+          })
+        }
+        return cell
+      },
+      'clock'
+    )
+  }
+
   if (task.recurrence || shownExtras.has('repeat')) {
     renderPropRow(
       grid,
@@ -434,8 +486,38 @@ export function renderTaskFormFields(container: HTMLElement, ctx: TaskFormFields
           add: (id) => {
             if (!task.dependencies.includes(id)) task.dependencies.push(id)
           },
+          renderDepExtra: (row, depId) => {
+            const spec = getDependencySpec(task, depId)
+            const typeSel = row.createEl('select', { cls: 'pm-dep-type', attr: { title: t(`taskForm.depType${spec.type}`) } })
+            for (const optType of ['FS', 'SS', 'FF'] as const) {
+              const opt = typeSel.createEl('option', { value: optType, text: optType })
+              if (optType === spec.type) opt.selected = true
+            }
+            const lagInput = row.createEl('input', {
+              cls: 'pm-dep-lag',
+              attr: {
+                type: 'number',
+                step: '1',
+                value: String(spec.lagDays),
+                title: t('taskForm.depLagDays')
+              }
+            })
+            row.createSpan({ cls: 'pm-dep-lag-unit', text: 'd' })
+
+            const commitSpec = () => {
+              const type = (typeSel.value as DependencyType) ?? 'FS'
+              const parsed = Number(lagInput.value)
+              const lagDays = lagInput.value.trim() !== '' && Number.isFinite(parsed) ? Math.trunc(parsed) : 0
+              typeSel.setAttribute('title', t(`taskForm.depType${type}`))
+              const next = { ...task.dependencyLinks, [depId]: { type, lagDays } }
+              task.dependencyLinks = pruneDependencyLinks(task.dependencies, next)
+            }
+            typeSel.addEventListener('change', commitSpec)
+            lagInput.addEventListener('change', commitSpec)
+          },
           remove: (id) => {
             task.dependencies = task.dependencies.filter((d) => d !== id)
+            task.dependencyLinks = pruneDependencyLinks(task.dependencies, task.dependencyLinks)
           }
         })
         return cell

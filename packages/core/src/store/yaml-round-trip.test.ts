@@ -550,6 +550,13 @@ describe('foreign frontmatter', () => {
     const task = makeTask({
       id: 't-full',
       title: 'Full',
+      durationDays: 5,
+      dependencies: ['dep-1', 'dep-2'],
+      dependencyLinks: {
+        'dep-1': { type: 'SS', lagDays: 2 },
+        'dep-2': { type: 'FS', lagDays: 0 },
+        stale: { type: 'FF', lagDays: -1 }
+      },
       completed: '2026-04-01',
       recurrence: { interval: 'weekly', every: 1 },
       timeEstimate: 4,
@@ -557,8 +564,12 @@ describe('foreign frontmatter', () => {
       customFields: { sprint: 'S1' }
     })
 
-    const taskKeys = Object.keys(buildTaskFrontmatter(task, project, null, refs))
+    const frontmatter = buildTaskFrontmatter(task, project, null, refs)
+    const taskKeys = Object.keys(frontmatter)
     expect(taskKeys.filter((key) => !TASK_FRONTMATTER_KEYS.has(key))).toEqual([])
+    const hydrated = hydrateTaskFromFile(frontmatter, '', 'Projects/P_tasks/t-full.md').task
+    expect(hydrated.durationDays).toBe(5)
+    expect(hydrated.dependencyLinks).toEqual({ 'dep-1': { type: 'SS', lagDays: 2 } })
 
     const parsedProject = parseFrontmatter(serializeProject(project, [], refs))
     const projectKeys = parsedProject.kind === 'frontmatter' ? Object.keys(parsedProject.frontmatter) : []

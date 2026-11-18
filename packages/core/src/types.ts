@@ -67,6 +67,7 @@ export interface Task {
   priority: TaskPriority
   start: string // YYYY-MM-DD, empty string = unset
   due: string // YYYY-MM-DD, empty string = unset
+  durationDays?: number // mandatory execution duration in working/calendar days (>= 1)
   baselineStart?: string // YYYY-MM-DD, captured schedule baseline start
   baselineDue?: string // YYYY-MM-DD, captured schedule baseline due
   progress: number // 0-100
@@ -75,6 +76,7 @@ export interface Task {
   tags: string[]
   subtasks: Task[]
   dependencies: string[] // task IDs
+  dependencyLinks?: Record<string, DependencySpec> // optional per-dependency type (FS/SS/FF) & lagDays (±days)
   replacedBy?: string // replacement task ID when status is superseded
   replaces?: string // task ID this task supersedes
   recurrence?: Recurrence
@@ -537,6 +539,65 @@ export const DEFAULT_SETTINGS: PMSettings = {
 
 export function makeId(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
+}
+
+export type DependencyType = 'FS' | 'SS' | 'FF'
+
+export interface DependencySpec {
+  type?: DependencyType
+  lagDays?: number
+}
+
+export function normalizeDependencySpec(spec?: DependencySpec): { type: DependencyType; lagDays: number } {
+  const type: DependencyType = spec?.type === 'SS' || spec?.type === 'FF' ? spec.type : 'FS'
+  const rawLag = spec?.lagDays
+  const lagDays = typeof rawLag === 'number' && Number.isFinite(rawLag) ? Math.trunc(rawLag) : 0
+  return { type, lagDays }
+}
+
+export function getDependencySpec(
+  task: Pick<Task, 'dependencyLinks'>,
+  depId: string
+): { type: DependencyType; lagDays: number } {
+  return normalizeDependencySpec(task.dependencyLinks?.[depId])
+}
+
+export function formatDependencyBadge(spec?: DependencySpec): string {
+  const { type, lagDays } = normalizeDependencySpec(spec)
+  const lagStr = lagDays > 0 ? `+${lagDays}d` : lagDays < 0 ? `${lagDays}d` : ''
+  if (type === 'FS') return lagStr
+  return lagStr ? `${type} ${lagStr}` : type
+}
+
+export function pruneDependencyLinks(
+  dependencies: string[],
+  links?: Record<string, DependencySpec>
+): Record<string, DependencySpec> | undefined {
+  if (!links) return undefined
+  const active = new Set(dependencies)
+  const out: Record<string, DependencySpec> = {}
+  for (const [depId, rawSpec] of Object.entries(links)) {
+    if (!active.has(depId)) continue
+    const { type, lagDays } = normalizeDependencySpec(rawSpec)
+    if (type === 'FS' && lagDays === 0) continue
+    const entry: DependencySpec = {}
+    if (type !== 'FS') entry.type = type
+    if (lagDays !== 0) entry.lagDays = lagDays
+    out[depId] = entry
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+export function remapDependencyLinks(
+  links: Record<string, DependencySpec> | undefined,
+  mapKey: (id: string) => string
+): Record<string, DependencySpec> | undefined {
+  if (!links) return undefined
+  const out: Record<string, DependencySpec> = {}
+  for (const [depId, spec] of Object.entries(links)) {
+    out[mapKey(depId)] = { ...spec }
+  }
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
 export function makeTask(overrides: Partial<Task> = {}): Task {

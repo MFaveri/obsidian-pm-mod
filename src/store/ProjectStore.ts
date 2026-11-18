@@ -51,6 +51,8 @@ import {
   serializeTask,
   TASK_FRONTMATTER_KEYS,
   taskFileName,
+  pruneDependencyLinks,
+  remapDependencyLinks,
   taskFilePath,
   TASK_SLUG_MAX_LENGTH,
   type RefWriter,
@@ -1303,6 +1305,10 @@ export class ProjectStore implements TaskSource {
       }
     }
     replacement.dependencies = replacementDependencies
+    replacement.dependencyLinks = pruneDependencyLinks(replacementDependencies, {
+      ...source.dependencyLinks,
+      ...replacement.dependencyLinks
+    })
     replacement.replaces = source.id
     replacement.updatedAt = new Date().toISOString()
     if (options.duplicateSubtasks) {
@@ -1326,6 +1332,9 @@ export class ProjectStore implements TaskSource {
     for (const { task } of flattenTasks(project.tasks)) {
       if (task.id === source.id || task.id === replacement.id || !task.dependencies.includes(source.id)) continue
       task.dependencies = [...new Set(task.dependencies.map((id) => (id === source.id ? replacement.id : id)))]
+      task.dependencyLinks = remapDependencyLinks(task.dependencyLinks, (id) =>
+        id === source.id ? replacement.id : id
+      )
       task.updatedAt = new Date().toISOString()
       changedDependents.push(task.id)
     }
@@ -1334,6 +1343,9 @@ export class ProjectStore implements TaskSource {
       externalTask.dependencies = [
         ...new Set(externalTask.dependencies.map((id) => (id === source.id ? replacement.id : id)))
       ]
+      externalTask.dependencyLinks = remapDependencyLinks(externalTask.dependencyLinks, (id) =>
+        id === source.id ? replacement.id : id
+      )
       externalTask.updatedAt = new Date().toISOString()
       this.markDirty(externalProject, [externalTask.id], 'fm')
     }
@@ -1454,6 +1466,7 @@ export class ProjectStore implements TaskSource {
       if (fresh) task.id = fresh
       if (task.dependencies.some((dep) => mapping.has(dep))) {
         task.dependencies = task.dependencies.map((dep) => mapping.get(dep) ?? dep)
+        task.dependencyLinks = remapDependencyLinks(task.dependencyLinks, (dep) => mapping.get(dep) ?? dep)
       }
       if (task.replacedBy && mapping.has(task.replacedBy)) task.replacedBy = mapping.get(task.replacedBy)
       if (task.replaces && mapping.has(task.replaces)) task.replaces = mapping.get(task.replaces)
@@ -1657,6 +1670,9 @@ export class ProjectStore implements TaskSource {
     // The editor saves the whole task, so snapshot the subtree to diff against.
     const oldSubtree = task && patch.subtasks !== undefined ? flattenTasks(task.subtasks).map((f) => f.task) : []
     updateTaskInTree(project.tasks, taskId, patch)
+    if (task && patch.dependencies !== undefined && patch.dependencyLinks === undefined) {
+      task.dependencyLinks = pruneDependencyLinks(task.dependencies, task.dependencyLinks)
+    }
     const titleChanged = task && patch.title !== undefined && patch.title !== oldTitle
     // A title change renames the file, forcing saveTaskFile's rename branch.
     const kind: DirtyKind = patchNeedsBodyRewrite(patch) || titleChanged ? 'full' : 'fm'

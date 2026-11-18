@@ -2,6 +2,7 @@ import { parsePlainDate } from '../dates'
 import type {
   CustomFieldDef,
   DateBucket,
+  DependencySpec,
   FilterCondition,
   FilterOp,
   FilterState,
@@ -30,6 +31,7 @@ import {
   makeDefaultSort,
   MAX_SORT_RULES,
   makeTask,
+  normalizeDependencySpec,
   PRIORITY_ICON_SETS,
   SORT_KEYS
 } from '../types'
@@ -224,6 +226,25 @@ export function hydrateSavedViews(raw: unknown[]): SavedView[] {
     })
 }
 
+function hydrateDependencyLinks(raw: unknown): Record<string, DependencySpec> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const out: Record<string, DependencySpec> = {}
+  for (const [depId, val] of Object.entries(raw as Record<string, unknown>)) {
+    if (!depId || !val || typeof val !== 'object') continue
+    const rawObj = val as Record<string, unknown>
+    const { type, lagDays } = normalizeDependencySpec({
+      type: rawObj.type as DependencySpec['type'],
+      lagDays: typeof rawObj.lagDays === 'number' ? rawObj.lagDays : undefined
+    })
+    if (type === 'FS' && lagDays === 0) continue
+    const entry: DependencySpec = {}
+    if (type !== 'FS') entry.type = type
+    if (lagDays !== 0) entry.lagDays = lagDays
+    out[depId] = entry
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
 export function mapRawToTask(r: Record<string, unknown>, overrides?: Partial<Task>): Task {
   return makeTask({
     id: r.id as string,
@@ -234,6 +255,10 @@ export function mapRawToTask(r: Record<string, unknown>, overrides?: Partial<Tas
     priority: (r.priority as Task['priority']) ?? 'medium',
     start: (r.start as string) ?? '',
     due: (r.due as string) ?? '',
+    durationDays:
+      typeof r.durationDays === 'number' && Number.isFinite(r.durationDays) && r.durationDays >= 1
+        ? Math.floor(r.durationDays)
+        : undefined,
     baselineStart:
       typeof r.baselineStart === 'string' && parsePlainDate(r.baselineStart) ? r.baselineStart : undefined,
     baselineDue: typeof r.baselineDue === 'string' && parsePlainDate(r.baselineDue) ? r.baselineDue : undefined,
@@ -245,6 +270,7 @@ export function mapRawToTask(r: Record<string, unknown>, overrides?: Partial<Tas
     tags: stringList(r.tags),
     subtasks: [],
     dependencies: stringList(r.dependencies),
+    dependencyLinks: hydrateDependencyLinks(r.dependencyLinks),
     replacedBy: typeof r.replacedBy === 'string' && r.replacedBy ? r.replacedBy : undefined,
     replaces: typeof r.replaces === 'string' && r.replaces ? r.replaces : undefined,
     recurrence:

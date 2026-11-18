@@ -904,6 +904,35 @@ describe('ProjectStore pull-forward on early finish', () => {
     expect(reloaded.config?.extraWorkdays).toEqual(['2026-11-21'])
     expect(reloaded.config?.extraNonWorkdays).toEqual(['2026-11-23'])
   })
+
+  it('persists durationDays and SS/lag dependencyLinks across scheduleAfterChange and reload', async () => {
+    const settings: PMSettings = { ...SETTINGS, autoSchedule: true, scheduleWorkdaysOnly: false }
+    const { app, vault } = makeFakeApp({ liveMetadataCache: true })
+    const store = new ProjectStore(app as unknown as App, () => settings)
+    const project = await store.createProject('Deps & Duration', 'Projects')
+    const blocker = makeTask({ title: 'Phase 1', start: '2026-11-02', due: '2026-11-06' })
+    const dependent = makeTask({
+      title: 'Phase 2',
+      start: '2026-11-02',
+      due: '2026-11-03',
+      durationDays: 4,
+      dependencies: [blocker.id],
+      dependencyLinks: { [blocker.id]: { type: 'SS', lagDays: 2 } }
+    })
+    await store.insertTask(project, blocker)
+    await store.insertTask(project, dependent)
+    await store.scheduleAfterChange(project, blocker.id)
+
+    expect(dependent.start).toBe('2026-11-04')
+    expect(dependent.due).toBe('2026-11-07')
+
+    const file = vault.getAbstractFileByPath(project.filePath)
+    if (!(file instanceof TFile)) throw new Error('project file missing')
+    const reloaded = expectDefined(await new ProjectStore(app as unknown as App, () => settings).loadProject(file))
+    const reloadedDep = reloaded.tasks.find((item) => item.id === dependent.id)
+    expect(reloadedDep?.durationDays).toBe(4)
+    expect(reloadedDep?.dependencyLinks).toEqual({ [blocker.id]: { type: 'SS', lagDays: 2 } })
+  })
 })
 
 describe('ProjectStore task attachments', () => {

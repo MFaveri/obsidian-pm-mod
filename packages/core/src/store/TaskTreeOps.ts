@@ -1,5 +1,5 @@
 import type { Task } from '../types'
-import { makeId } from '../types'
+import { makeId, remapDependencyLinks } from '../types'
 import { dedupePeople } from '../utils'
 
 export interface FlatTask {
@@ -107,6 +107,7 @@ function cloneNode(source: Task, includeSubtasks: boolean, idMap: Map<string, st
     updatedAt: now,
     subtasks: includeSubtasks ? source.subtasks.map((s) => cloneNode(s, true, idMap)) : [],
     dependencies: [...source.dependencies],
+    dependencyLinks: remapDependencyLinks(source.dependencyLinks, (id) => id),
     assignees: [...source.assignees],
     tags: [...source.tags],
     customFields: { ...source.customFields },
@@ -117,6 +118,7 @@ function cloneNode(source: Task, includeSubtasks: boolean, idMap: Map<string, st
 
 function remapDeps(task: Task, idMap: Map<string, string>): void {
   task.dependencies = task.dependencies.map((id) => idMap.get(id) ?? id)
+  task.dependencyLinks = remapDependencyLinks(task.dependencyLinks, (id) => idMap.get(id) ?? id)
   for (const sub of task.subtasks) remapDeps(sub, idMap)
 }
 

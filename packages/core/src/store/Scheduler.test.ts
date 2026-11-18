@@ -4,6 +4,7 @@ import {
   addDays,
   computeBaselineVariance,
   computeCriticalPath,
+  computeDurationRisk,
   computeSchedule,
   daysBetween,
   expandDateRangeOverrides,
@@ -600,5 +601,180 @@ describe('expandDateRangeOverrides', () => {
         workingWeekdays: [1, 2, 3, 4, 5]
       })
     ).toEqual(['2026-11-21', '2026-11-22'])
+  })
+})
+
+describe('durationDays and computeDurationRisk', () => {
+  it('flags a shortfall when available days are fewer than mandatory durationDays', () => {
+    // 2026-05-04 (Mon) .. 2026-05-06 (Wed) = 3 days, but durationDays = 5
+    const t = task({
+      id: 'd1',
+      start: '2026-05-04',
+      due: '2026-05-06',
+      durationDays: 5
+    })
+    expect(computeDurationRisk(t)).toEqual({
+      requiredDays: 5,
+      availableDays: 3,
+      shortfallDays: 2,
+      projectedDue: '2026-05-08'
+    })
+    // In working days (Mon-Fri), 5 working days from Mon May 4 ends Fri May 8; from Wed May 6 + weekend:
+    // If due is Thu May 7 (4 working days) and durationDays is 6 -> projectedDue skips Sat/Sun to Mon May 11
+    const withWeekend = task({
+      id: 'd2',
+      start: '2026-05-04',
+      due: '2026-05-07',
+      durationDays: 6
+    })
+    expect(computeDurationRisk(withWeekend, { workdaysOnly: true })).toEqual({
+      requiredDays: 6,
+      availableDays: 4,
+      shortfallDays: 2,
+      projectedDue: '2026-05-11'
+    })
+  })
+
+  it('returns null when window covers durationDays or task is a milestone', () => {
+    expect(
+      computeDurationRisk(task({ id: 'ok', start: '2026-05-04', due: '2026-05-08', durationDays: 5 }))
+    ).toBeNull()
+    expect(
+      computeDurationRisk(task({ id: 'ms', type: 'milestone', start: '2026-05-04', due: '2026-05-04', durationDays: 5 }))
+    ).toBeNull()
+  })
+
+  it('pushes due forward to enforce mandatory durationDays when rescheduled', () => {
+    const a = task({ id: 'a', start: '2026-05-04', due: '2026-05-06' })
+    const b = task({
+      id: 'b',
+      start: '2026-05-05',
+      due: '2026-05-06', // only 2 days wide currently
+      durationDays: 5,
+      dependencies: ['a']
+    })
+    const c = task({
+      id: 'c',
+      start: '2026-05-07',
+      due: '2026-05-08',
+      dependencies: ['b']
+    })
+    const result = computeSchedule([a, b, c], undefined, statuses)
+    // b pushed to May 7, enforced 5 days -> May 7..May 11; c pushed to May 12..May 13
+    expect(result.patches).toEqual([
+      { taskId: 'b', start: '2026-05-07', due: '2026-05-11' },
+      { taskId: 'c', start: '2026-05-12', due: '2026-05-13' }
+    ])
+  })
+
+  it('populates due when a dependent task with only start or no dates has durationDays', () => {
+    const a = task({ id: 'a', start: '2026-05-04', due: '2026-05-05' })
+    const b = task({ id: 'b', durationDays: 4, dependencies: ['a'] })
+    const result = computeSchedule([a, b], undefined, statuses)
+    expect(result.patches).toEqual([{ taskId: 'b', start: '2026-05-06', due: '2026-05-09' }])
+  })
+
+  it('uses mandatory durationDays in CPM even if due is manually compressed', () => {
+    const a = task({ id: 'a', start: '2026-05-04', due: '2026-05-05', durationDays: 5 })
+    const b = task({ id: 'b', start: '2026-05-09', due: '2026-05-10', dependencies: ['a'] })
+    const cpm = computeCriticalPath([a, b], statuses)
+    // a effectively finishes on May 8 (5 days from May 4), so b starts May 9 with 0 slack
+    expect(cpm.tasks['a']?.earlyFinish).toBe('2026-05-08')
+    expect(cpm.tasks['a']?.slackDays).toBe(0)
+    expect(cpm.criticalTaskIds).toEqual(['a', 'b'])
+  })
+})
+
+describe('dependency types (FS/SS/FF) and lagDays', () => {
+  it('supports FS positive lag and negative lead', () => {
+    const a = task({ id: 'a', start: '2026-05-04', due: '2026-05-06' })
+    const lag = task({
+      id: 'lag',
+      start: '2026-05-06',
+      due: '2026-05-07',
+      dependencies: ['a'],
+      dependencyLinks: { a: { type: 'FS', lagDays: 2 } }
+    })
+    const lead = task({
+      id: 'lead',
+      start: '2026-05-04',
+      due: '2026-05-05',
+      dependencies: ['a'],
+      dependencyLinks: { a: { lagDays: -1 } }
+    })
+    const result = computeSchedule([a, lag, lead], undefined, statuses)
+    expect(result.patches).toEqual([
+      { taskId: 'lag', start: '2026-05-09', due: '2026-05-10' },
+      { taskId: 'lead', start: '2026-05-06', due: '2026-05-07' }
+    ])
+  })
+
+  it('supports SS and FF dependencies preserving successor duration', () => {
+    const a = task({ id: 'a', start: '2026-05-04', due: '2026-05-08' })
+    // SS +2d: b must start >= May 6; currently May 4..May 5 (2 days) -> May 6..May 7
+    const b = task({
+      id: 'b',
+      start: '2026-05-04',
+      due: '2026-05-05',
+      dependencies: ['a'],
+      dependencyLinks: { a: { type: 'SS', lagDays: 2 } }
+    })
+    // FF +0d: c must finish >= May 8; currently May 4..May 5 (2 days) -> May 7..May 8
+    const c = task({
+      id: 'c',
+      start: '2026-05-04',
+      due: '2026-05-05',
+      dependencies: ['a'],
+      dependencyLinks: { a: { type: 'FF' } }
+    })
+    const result = computeSchedule([a, b, c], undefined, statuses)
+    expect(result.patches).toEqual([
+      { taskId: 'b', start: '2026-05-06', due: '2026-05-07' },
+      { taskId: 'c', start: '2026-05-07', due: '2026-05-08' }
+    ])
+  })
+
+  it('does not pull SS dependent earlier when predecessor merely finishes early', () => {
+    const a = task({
+      id: 'a',
+      status: 'done',
+      start: '2026-05-04',
+      due: '2026-05-08',
+      completed: '2026-05-06'
+    })
+    const b = task({
+      id: 'b',
+      start: '2026-05-06',
+      due: '2026-05-08',
+      dependencies: ['a'],
+      dependencyLinks: { a: { type: 'SS', lagDays: 2 } }
+    })
+    const result = computeSchedule([a, b], 'a', statuses, true)
+    expect(result.patches).toEqual([])
+  })
+
+  it('computes CPM criticality and tight edges for SS, FF, and FS with lag', () => {
+    const a = task({ id: 'a', start: '2026-05-04', due: '2026-05-06' })
+    const b = task({
+      id: 'b',
+      start: '2026-05-06',
+      due: '2026-05-10',
+      dependencies: ['a'],
+      dependencyLinks: { a: { type: 'SS', lagDays: 2 } }
+    })
+    const c = task({
+      id: 'c',
+      start: '2026-05-08',
+      due: '2026-05-10',
+      dependencies: ['b'],
+      dependencyLinks: { b: { type: 'FF' } }
+    })
+    const cpm = computeCriticalPath([a, b, c], statuses)
+    expect(cpm.criticalTaskIds).toEqual(['a', 'b', 'c'])
+    expect(cpm.criticalEdges).toEqual([
+      ['a', 'b'],
+      ['b', 'c']
+    ])
+    expect(cpm.tasks['a']?.slackDays).toBe(0)
   })
 })

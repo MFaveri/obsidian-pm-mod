@@ -1,8 +1,19 @@
-import { Notice } from 'obsidian'
-import { DependencyBlockedError, ReplacementRequiredError, type Task, computeBaselineVariance, t } from '@dotpm/core'
+import { Menu, Notice } from 'obsidian'
+import {
+  DependencyBlockedError,
+  ReplacementRequiredError,
+  type DependencySpec,
+  type Task,
+  computeBaselineVariance,
+  computeDurationRisk,
+  getDependencySpec,
+  pruneDependencyLinks,
+  t
+} from '@dotpm/core'
 import {
   type BarBaselineInfo,
   type BarCriticalInfo,
+  type BarDurationInfo,
   svgEl,
   safeAsync,
   barAsideText,
@@ -44,6 +55,10 @@ function baselineInfoFor(task: Task, ctx: RendererContext): BarBaselineInfo | un
   }
 }
 
+function durationInfoFor(task: Task, ctx: RendererContext): BarDurationInfo | undefined {
+  return computeDurationRisk(task, ctx.scheduleOptionsOf(task.id)) ?? undefined
+}
+
 export function renderTaskBar(g: SVGGElement, task: Task, row: number, _depth: number, ctx: RendererContext): void {
   const project = ctx.scope.projectOf(task.id)
   if (!project) return
@@ -70,7 +85,8 @@ export function renderTaskBar(g: SVGGElement, task: Task, row: number, _depth: n
     color,
     barAsideText(task, ctx.labelFields, ctx.labelSource),
     criticalInfoFor(task, ctx),
-    baselineInfoFor(task, ctx)
+    baselineInfoFor(task, ctx),
+    durationInfoFor(task, ctx)
   )
   if (!drawn) return
   const { barGroup, rect, x, y, width, height } = drawn
@@ -263,4 +279,74 @@ export function renderDependencyArrows(ctx: RendererContext): void {
     ? new Set(ctx.criticalPath.criticalEdges.map(([from, to]) => `${from}->${to}`))
     : undefined
   drawDependencyArrows(ctx, ctx.taskRows, criticalEdges)
+  const arrowGroup = ctx.svgEl.querySelector('.pm-gantt-arrows')
+  if (!arrowGroup) return
+
+  arrowGroup.addEventListener('click', (e) => {
+    const target = (e.target as Element | null)?.closest('.pm-gantt-arrow-hit')
+    const fromId = target?.getAttribute('data-dep-from')
+    const toId = target?.getAttribute('data-dep-to')
+    if (!fromId || !toId) return
+    const toTask = ctx.scope.taskById(toId)
+    const toProject = ctx.scope.projectOf(toId)
+    if (!toTask || !toProject) return
+
+    e.stopPropagation()
+    const spec = getDependencySpec(toTask, fromId)
+    const applySpec = async (nextSpec: DependencySpec) => {
+      const nextLinks = pruneDependencyLinks(toTask.dependencies, {
+        ...toTask.dependencyLinks,
+        [fromId]: nextSpec
+      })
+      await ctx.plugin.store.updateTask(toProject, toTask.id, { dependencyLinks: nextLinks })
+      await ctx.plugin.store.scheduleAfterChange(toProject, toTask.id)
+      await ctx.onRefresh()
+    }
+
+    const menu = new Menu()
+    for (const optType of ['FS', 'SS', 'FF'] as const) {
+      menu.addItem((item) =>
+        item
+          .setTitle(t(`taskForm.depType${optType}`))
+          .setChecked(spec.type === optType)
+          .onClick(
+            safeAsync(async () => {
+              await applySpec({ type: optType, lagDays: spec.lagDays })
+            })
+          )
+      )
+    }
+    menu.addSeparator()
+    for (const lagOpt of [-2, -1, 0, 1, 2, 5]) {
+      const label = lagOpt > 0 ? `+${lagOpt}d` : `${lagOpt}d`
+      menu.addItem((item) =>
+        item
+          .setTitle(label)
+          .setChecked(spec.lagDays === lagOpt)
+          .onClick(
+            safeAsync(async () => {
+              await applySpec({ type: spec.type, lagDays: lagOpt })
+            })
+          )
+      )
+    }
+    menu.addSeparator()
+    menu.addItem((item) =>
+      item
+        .setTitle(t('taskForm.removeDependency'))
+        .setIcon('trash')
+        .onClick(
+          safeAsync(async () => {
+            const nextDeps = toTask.dependencies.filter((id) => id !== fromId)
+            const nextLinks = pruneDependencyLinks(nextDeps, toTask.dependencyLinks)
+            await ctx.plugin.store.updateTask(toProject, toTask.id, {
+              dependencies: nextDeps,
+              dependencyLinks: nextLinks
+            })
+            await ctx.onRefresh()
+          })
+        )
+    )
+    menu.showAtMouseEvent(e as MouseEvent)
+  })
 }

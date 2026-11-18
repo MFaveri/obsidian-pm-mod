@@ -668,3 +668,53 @@ button.pm-icon-trigger {
   outline: 2px solid var(--interactive-accent);
   outline-offset: -1px;
 }
+
+.pm-prop-duration-cell {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pm-duration-risk {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--color-orange, var(--color-red));
+}
+.pm-duration-risk-btn {
+  padding: 2px 7px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--color-orange, var(--color-red));
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.pm-duration-risk-btn:hover {
+  background: var(--background-modifier-hover);
+}
+
+.pm-dep-type {
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  height: 22px;
+}
+.pm-dep-lag {
+  width: 48px;
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  height: 22px;
+  text-align: right;
+}
+.pm-dep-lag-unit {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: -4px;
+}

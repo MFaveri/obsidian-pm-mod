@@ -5,6 +5,8 @@ import {
   type Task,
   displayName,
   formatDateShort,
+  formatDependencyBadge,
+  getDependencySpec,
   getPriorityConfig,
   getStatusConfig,
   parsePlainDate,
@@ -82,6 +84,13 @@ export interface BarBaselineInfo {
   showBar?: boolean
 }
 
+export interface BarDurationInfo {
+  requiredDays: number
+  availableDays: number
+  shortfallDays: number
+  projectedDue: string
+}
+
 function formatSlackTooltip(info: BarCriticalInfo): string {
   return info.critical ? t('gantt.tooltipCritical') : tn('gantt.tooltipSlack', info.slackDays)
 }
@@ -146,7 +155,8 @@ export function drawTaskBar(
   color: string,
   aside = '',
   criticalInfo?: BarCriticalInfo,
-  baselineInfo?: BarBaselineInfo
+  baselineInfo?: BarBaselineInfo,
+  durationInfo?: BarDurationInfo
 ): DrawnBar | null {
   const startDate = parsePlainDate(task.start)
   const endDate = parsePlainDate(task.due)
@@ -178,7 +188,7 @@ export function drawTaskBar(
     ry: BAR_BORDER_RADIUS,
     fill: color,
     opacity: 0.4,
-    class: `pm-gantt-bar${criticalInfo?.highlight && criticalInfo.critical ? ' pm-gantt-bar--critical' : ''}`
+    class: `pm-gantt-bar${criticalInfo?.highlight && criticalInfo.critical ? ' pm-gantt-bar--critical' : ''}${durationInfo ? ' pm-gantt-bar--duration-risk' : ''}`
   })
   barGroup.appendChild(rect)
 
@@ -229,6 +239,18 @@ export function drawTaskBar(
   if (task.assignees.length) {
     lines.push(t('gantt.tooltipAssignees', { names: task.assignees.map(displayName).join(', ') }))
   }
+  if (task.durationDays !== undefined && task.durationDays >= 1) {
+    lines.push(t('gantt.tooltipDuration', { days: Math.floor(task.durationDays) }))
+  }
+  if (durationInfo) {
+    lines.push(
+      t('gantt.tooltipDurationRisk', {
+        available: durationInfo.availableDays,
+        required: durationInfo.requiredDays,
+        projectedDue: formatDateShort(durationInfo.projectedDue)
+      })
+    )
+  }
   if (criticalInfo) {
     lines.push(formatSlackTooltip(criticalInfo))
   }
@@ -237,6 +259,28 @@ export function drawTaskBar(
   }
   tooltip.textContent = lines.join('\n')
   rect.appendChild(tooltip)
+
+  if (durationInfo) {
+    const projectedDate = parsePlainDate(durationInfo.projectedDue)
+    if (projectedDate) {
+      const actualEnd = x + width
+      const projectedEnd = Math.min(canvas.cfg.totalWidth, dateToX(canvas.cfg, projectedDate.add({ days: 1 })))
+      if (projectedEnd > actualEnd) {
+        barGroup.appendChild(
+          svgEl('rect', {
+            x: actualEnd,
+            y: y + 2,
+            width: projectedEnd - actualEnd,
+            height: Math.max(4, height - 4),
+            rx: BAR_BORDER_RADIUS,
+            ry: BAR_BORDER_RADIUS,
+            class: 'pm-gantt-duration-overflow',
+            'pointer-events': 'none'
+          })
+        )
+      }
+    }
+  }
 
   if (baselineInfo?.showBar) {
     const bStart = parsePlainDate(baselineInfo.baselineStart)
@@ -495,30 +539,81 @@ export function drawDependencyArrows(
     if (!to) continue
     const toY = HEADER_HEIGHT + to.row * ROW_HEIGHT + ROW_HEIGHT / 2
     const taskStart = parsePlainDate(task.start) ?? (task.type === 'milestone' ? parsePlainDate(task.due) : null)
-    if (!taskStart) continue
-    const toX = dateToX(canvas.cfg, taskStart)
+    const taskDue = parsePlainDate(task.due) ?? taskStart
+    if (!taskStart || !taskDue) continue
+    const toLeftX = dateToX(canvas.cfg, taskStart)
+    const toRightX = dateToX(canvas.cfg, taskDue.add({ days: 1 }))
 
     for (const depId of task.dependencies) {
       const from = byId.get(depId)
       if (!from) continue
-      const depDue = parsePlainDate(from.task.due) ?? parsePlainDate(from.task.start)
-      if (!depDue) continue
-      const fromX = dateToX(canvas.cfg, depDue.add({ days: 1 }))
+      const depStart = parsePlainDate(from.task.start) ?? parsePlainDate(from.task.due)
+      const depDue = parsePlainDate(from.task.due) ?? depStart
+      if (!depStart || !depDue) continue
+      const fromLeftX = dateToX(canvas.cfg, depStart)
+      const fromRightX = dateToX(canvas.cfg, depDue.add({ days: 1 }))
       const fromY = HEADER_HEIGHT + from.row * ROW_HEIGHT + ROW_HEIGHT / 2
-      const midX = (fromX + toX) / 2
+
+      const spec = getDependencySpec(task, depId)
+      let fromX: number
+      let toX: number
+      let c1x: number
+      let c2x: number
+      if (spec.type === 'SS') {
+        fromX = fromLeftX
+        toX = toLeftX
+        c1x = c2x = Math.min(fromX, toX) - 18
+      } else if (spec.type === 'FF') {
+        fromX = fromRightX
+        toX = toRightX
+        c1x = c2x = Math.max(fromX, toX) + 18
+      } else {
+        fromX = fromRightX
+        toX = toLeftX
+        c1x = c2x = (fromX + toX) / 2
+      }
+
+      const d = `M ${fromX} ${fromY} C ${c1x} ${fromY}, ${c2x} ${toY}, ${toX} ${toY}`
+      const labelX = 0.125 * fromX + 0.375 * c1x + 0.375 * c2x + 0.125 * toX
+      const labelY = (fromY + toY) / 2
       const isCritical = criticalEdges ? criticalEdges.has(`${depId}->${task.id}`) : false
       const cls = criticalEdges
         ? isCritical
           ? 'pm-gantt-arrow pm-gantt-arrow--critical'
           : 'pm-gantt-arrow pm-gantt-arrow--dimmed'
         : 'pm-gantt-arrow'
+      const badge = formatDependencyBadge(spec)
+
       arrowGroup.appendChild(
         svgEl('path', {
-          d: `M ${fromX} ${fromY} C ${midX} ${fromY}, ${midX} ${toY}, ${toX} ${toY}`,
+          d,
           class: cls,
+          'data-dep-from': depId,
+          'data-dep-to': task.id,
           'marker-end': isCritical ? 'url(#pm-arrowhead-critical)' : 'url(#pm-arrowhead)'
         })
       )
+      const hit = svgEl('path', {
+        d,
+        class: 'pm-gantt-arrow-hit',
+        'data-dep-from': depId,
+        'data-dep-to': task.id
+      })
+      const tt = svgEl('title', {})
+      tt.textContent = badge ? `${from.task.title} -> ${task.title} (${badge})` : `${from.task.title} -> ${task.title}`
+      hit.appendChild(tt)
+      arrowGroup.appendChild(hit)
+
+      if (badge) {
+        const labelEl = svgEl('text', {
+          x: labelX,
+          y: labelY - 3,
+          'text-anchor': 'middle',
+          class: `pm-gantt-arrow-badge${isCritical ? ' pm-gantt-arrow-badge--critical' : ''}`
+        })
+        labelEl.textContent = badge
+        arrowGroup.appendChild(labelEl)
+      }
     }
   }
 

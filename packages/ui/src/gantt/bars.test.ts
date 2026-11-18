@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_STATUSES, makeTask } from '@dotpm/core'
+import { DEFAULT_STATUSES, Temporal, makeTask } from '@dotpm/core'
 import { svgEl } from '#dom'
-import { buildTimelineConfig, HEADER_HEIGHT, ROW_HEIGHT } from './TimelineConfig'
+import { buildTimelineConfig, dateToX, HEADER_HEIGHT, ROW_HEIGHT } from './TimelineConfig'
 import type { GanttCanvas } from './canvas'
 import { drawDependencyArrows, drawMilestoneDiamond, drawSummaryBar, drawTaskBar } from './bars'
 import { renderGridLines } from './canvas'
@@ -210,5 +210,70 @@ describe('calendar day shading', () => {
     expect(canvas.svgEl.querySelectorAll('.pm-gantt-extra-workday').length).toBeGreaterThanOrEqual(1)
     expect(canvas.headerSvgEl.querySelectorAll('.pm-gantt-timeoff-header').length).toBeGreaterThanOrEqual(1)
     expect(canvas.headerSvgEl.querySelectorAll('.pm-gantt-extra-workday-header').length).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe('mandatory duration risk overlay', () => {
+  it('draws a risk stroke, overflow extension bar, and duration tooltip when window is short', () => {
+    const t = makeTask({
+      id: 'd1',
+      start: '2026-04-02',
+      due: '2026-04-04',
+      durationDays: 5
+    })
+    const canvas = makeCanvas([t])
+    const g = svgEl('g', {})
+    canvas.svgEl.appendChild(g)
+
+    const drawn = drawTaskBar(g, canvas, DEFAULT_STATUSES, t, 0, '#3b82f6', '', undefined, undefined, {
+      requiredDays: 5,
+      availableDays: 3,
+      shortfallDays: 2,
+      projectedDue: '2026-04-06'
+    })
+
+    expect(drawn?.rect.getAttribute('class')).toContain('pm-gantt-bar--duration-risk')
+    const overflow = drawn?.barGroup.querySelector('.pm-gantt-duration-overflow')
+    expect(overflow).not.toBeNull()
+    expect(Number(overflow?.getAttribute('width'))).toBeGreaterThan(0)
+    const tip = drawn?.rect.querySelector('title')?.textContent ?? ''
+    expect(tip).toContain('Duration: 5d')
+    expect(tip).toContain('3d / 5d')
+  })
+
+  it('draws SS and FF dependency arrows with matching edge anchors and badges', () => {
+    const a = makeTask({ id: 'a', start: '2026-04-02', due: '2026-04-05' })
+    const b = makeTask({
+      id: 'b',
+      start: '2026-04-04',
+      due: '2026-04-07',
+      dependencies: ['a'],
+      dependencyLinks: { a: { type: 'SS', lagDays: 2 } }
+    })
+    const c = makeTask({
+      id: 'c',
+      start: '2026-04-03',
+      due: '2026-04-05',
+      dependencies: ['a'],
+      dependencyLinks: { a: { type: 'FF' } }
+    })
+    const canvas = makeCanvas([a, b, c])
+    drawDependencyArrows(canvas, [
+      { task: a, depth: 0 },
+      { task: b, depth: 0 },
+      { task: c, depth: 0 }
+    ])
+
+    const paths = Array.from(canvas.svgEl.querySelectorAll('.pm-gantt-arrow'))
+    expect(paths).toHaveLength(2)
+    // SS links start-to-start (anchors on a.start), FF links finish-to-finish (anchors on a.due + 1)
+    const ssD = paths[0]?.getAttribute('d') ?? ''
+    const ffD = paths[1]?.getAttribute('d') ?? ''
+    const expectedSsFromX = dateToX(canvas.cfg, Temporal.PlainDate.from('2026-04-02'))
+    const expectedFfFromX = dateToX(canvas.cfg, Temporal.PlainDate.from('2026-04-06'))
+    expect(ssD.startsWith(`M ${expectedSsFromX} `)).toBe(true)
+    expect(ffD.startsWith(`M ${expectedFfFromX} `)).toBe(true)
+    const badges = Array.from(canvas.svgEl.querySelectorAll('.pm-gantt-arrow-badge')).map((el) => el.textContent)
+    expect(badges).toEqual(['SS +2d', 'FF'])
   })
 })

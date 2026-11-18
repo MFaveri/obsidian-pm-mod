@@ -44,6 +44,8 @@ export interface MultiSelectOpts {
   depsList?: boolean
   /** The note a deps-list value stands for, turning its title into a link that opens it. */
   linkFor?: (id: string) => DepLink | null
+  /** Optional inline controls appended to each dependency row (before the remove button). */
+  renderDepExtra?: (row: HTMLElement, id: string) => void
 }
 
 /**
@@ -112,6 +114,7 @@ export function renderMultiSelect(opts: MultiSelectOpts): void {
         id,
         title: labelOf(id),
         link: opts.linkFor?.(id),
+        extra: opts.renderDepExtra ? (row) => opts.renderDepExtra?.(row, id) : undefined,
         onRemove: () => {
           opts.remove(id)
           renderValues()
