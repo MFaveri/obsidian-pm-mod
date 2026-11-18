@@ -457,3 +457,24 @@
 .pm-gantt-arrow-badge--critical {
   fill: var(--color-red);
 }
+
+.pm-gantt-task-summary-bar {
+  cursor: pointer;
+}
+.pm-gantt-summary--collapsed .pm-gantt-task-summary-bar {
+  opacity: 0.55;
+}
+.pm-gantt-summary-aside {
+  font-size: 10px;
+  font-weight: 500;
+  fill: var(--text-muted);
+}
+.pm-gantt-bar--overload {
+  outline: 2px dashed var(--color-orange, var(--color-red));
+  outline-offset: 1px;
+}
+.pm-gantt-label-overload {
+  background: color-mix(in srgb, var(--color-orange, var(--color-red)) 15%, transparent);
+  color: var(--color-orange, var(--color-red));
+  border-color: color-mix(in srgb, var(--color-orange, var(--color-red)) 40%, transparent);
+}

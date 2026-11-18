@@ -7,7 +7,9 @@ import {
   type Task,
   collectAllTags,
   computeScheduleHealth,
+  computeScopeWorkload,
   excludeSupersededTasks,
+  findTask,
   flattenTasks,
   totalLoggedHours,
   Temporal,
@@ -166,6 +168,7 @@ export class ProjectOverviewView extends ItemView {
 
     this.renderMetrics(main, project, rollup)
     this.renderScheduleHealth(main, project, config)
+    this.renderWorkload(main, project, config)
     this.renderDescription(main, project)
     this.renderMilestones(main, tasks, config)
     this.renderSubProjects(main, project)
@@ -359,6 +362,92 @@ export class ProjectOverviewView extends ItemView {
             }
           })
         })
+      }
+    }
+  }
+
+  private renderWorkload(parent: HTMLElement, project: Project, config: ResolvedProjectConfig): void {
+    const workload = computeScopeWorkload(project.tasks, config.statuses, {
+      workingWeekdays: config.workingWeekdays,
+      holidays: this.plugin.settings.holidays,
+      extraWorkdays: config.extraWorkdays,
+      extraNonWorkdays: config.extraNonWorkdays
+    })
+
+    const note = workload.assignees.length
+      ? `${workload.assignees.length} ${t('project.members')}${workload.totalOverloadedAssignees > 0 ? ` · ${workload.totalOverloadedAssignees} ${t('overview.workloadOverloaded').toLowerCase()}` : ''}`
+      : ''
+    const section = this.section(parent, t('overview.workload'), note)
+
+    if (workload.assignees.length === 0) {
+      section.createDiv({ cls: 'pm-overview-muted', text: t('overview.nobodyAssigned') })
+      return
+    }
+
+    const list = section.createDiv('pm-overview-workload-list')
+    for (const item of workload.assignees) {
+      const card = list.createDiv(
+        `pm-overview-workload-card${item.isOverloaded ? ' pm-overview-workload-card--alert' : ''}`
+      )
+      const head = card.createDiv('pm-overview-workload-head')
+
+      const userBox = head.createDiv('pm-overview-workload-user')
+      new Avatar(userBox).setName(item.assignee).setSize('sm')
+      userBox.createSpan({ cls: 'pm-overview-workload-name', text: item.assignee })
+
+      const badgeBox = head.createDiv('pm-overview-workload-badge')
+      if (item.isOverloaded) {
+        new Chip(badgeBox)
+          .setLabel(tn('overview.overloadedDays', item.overloadDaysCount))
+          .setVariant('solid')
+          .setColor('var(--color-orange, var(--color-red))')
+          .setSize('sm')
+      } else {
+        new Chip(badgeBox)
+          .setLabel(t('overview.workloadBalanced'))
+          .setVariant('outline')
+          .setColor('var(--color-green)')
+          .setSize('sm')
+      }
+
+      const meta = card.createDiv('pm-overview-workload-meta')
+      meta.createSpan({
+        cls: 'pm-overview-workload-sub',
+        text: tn('overview.activeTasksCount', item.activeTaskCount)
+      })
+
+      if (item.conflicts.length > 0) {
+        const conflictBox = card.createDiv('pm-overview-workload-conflicts')
+        conflictBox.createSpan({ cls: 'pm-overview-workload-conflict-label', text: t('overview.concurrentTasks') })
+        for (const conflict of item.conflicts) {
+          const t1 = findTask(project.tasks, conflict.task1Id)
+          const t2 = findTask(project.tasks, conflict.task2Id)
+          if (!t1 || !t2) continue
+          const row = conflictBox.createDiv('pm-overview-workload-conflict-row')
+          const link1 = row.createSpan({ cls: 'pm-overview-workload-conflict-link', text: t1.title })
+          link1.addEventListener('click', () => {
+            openTaskModal(this.plugin, project, {
+              task: t1,
+              onSave: async () => {
+                this.render()
+              }
+            })
+          })
+          row.createSpan({ text: ' ↔ ' })
+          const link2 = row.createSpan({ cls: 'pm-overview-workload-conflict-link', text: t2.title })
+          link2.addEventListener('click', () => {
+            openTaskModal(this.plugin, project, {
+              task: t2,
+              onSave: async () => {
+                this.render()
+              }
+            })
+          })
+          row.createSpan({
+            cls: 'pm-overview-muted',
+            text: ` (${tn('overview.overloadedDays', conflict.overlappingDays)})`
+          })
+        }
       }
     }
   }

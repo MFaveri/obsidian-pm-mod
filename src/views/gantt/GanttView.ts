@@ -13,6 +13,7 @@ import {
   flattenTasks,
   makeTask,
   shownFields,
+  computeScopeWorkload,
   Temporal,
   today,
   t
@@ -67,6 +68,7 @@ export class GanttView implements SubView {
   /** Read from settings once per render pass. */
   private collapsedIds: ReadonlySet<string> = new Set()
   private collapsedProjectPaths: ReadonlySet<string> = new Set()
+  private overloadedTaskIds: ReadonlySet<string> = new Set()
   private cfg!: TimelineCfg
   private drag: DragState = makeDragState()
   private link: LinkState = makeLinkState()
@@ -97,8 +99,20 @@ export class GanttView implements SubView {
     private showCriticalPath: boolean,
     private showBaseline: boolean,
     /** Ctrl+scroll changed the zoom. */
-    private onZoom: (zoom: number) => void
+    private onZoom: (zoom: number) => void,
+    private showWorkload = false
   ) {}
+
+  getShowWorkload(): boolean {
+    return this.showWorkload
+  }
+  setShowWorkload(show: boolean): void {
+    this.showWorkload = show
+    this.render()
+  }
+  toggleWorkload(): void {
+    this.setShowWorkload(!this.showWorkload)
+  }
 
   /** Redraws at `zoom`, keeping the date at `clientX` (or the middle of the chart) where it was. */
   setZoom(zoom: number, clientX?: number): void {
@@ -178,6 +192,13 @@ export class GanttView implements SubView {
       : null
     const workingWeekdays = primaryCfg?.workingWeekdays
     this.criticalPath = this.scope.criticalPath(this.plugin.settings.holidays, this.externalPredecessors())
+    const workloadResult = computeScopeWorkload(this.scope.tasks(), this.scope.config.statuses, {
+      workingWeekdays,
+      holidays: this.plugin.settings.holidays,
+      extraWorkdays,
+      extraNonWorkdays
+    })
+    this.overloadedTaskIds = workloadResult.overloadedTaskIds
     this.cfg = buildTimelineConfig(timelineTasks, this.granularity, {
       zoom: this.zoom,
       isHidden: nonWorkingDay(this.nonWorkingDays, this.plugin.settings.holidays, {
@@ -381,6 +402,8 @@ export class GanttView implements SubView {
       collapsedIds: this.collapsedIds,
       criticalPath: this.criticalPath,
       showCriticalPath: this.showCriticalPath,
+      showWorkload: this.showWorkload,
+      overloadedTaskIds: this.overloadedTaskIds,
       onRefresh: this.onRefresh
     }
 
@@ -454,6 +477,9 @@ export class GanttView implements SubView {
       criticalPath: this.criticalPath,
       showCriticalPath: this.showCriticalPath,
       showBaseline: this.showBaseline,
+      showWorkload: this.showWorkload,
+      overloadedTaskIds: this.overloadedTaskIds,
+      collapsedIds: this.collapsedIds,
       scheduleOptionsOf: (taskId: string) => {
         const cfg = this.scope.configOf(taskId)
         return {

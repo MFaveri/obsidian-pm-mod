@@ -134,7 +134,7 @@ const sortFields = (config?: ResolvedProjectConfig): SortField[] => [
 
 /** One of a mode's own controls, as the options slot, the Tune list and the More menu draw it. */
 interface ViewOption {
-  id: 'today' | 'scale' | 'days' | 'critical' | 'baseline' | 'collapse'
+  id: 'today' | 'scale' | 'days' | 'critical' | 'baseline' | 'workload' | 'collapse'
   icon: string
   label: string
   /** The current value: the Tune list's faint state, and the chip's text when `chip` is `value`. */
@@ -166,6 +166,7 @@ export class ProjectView extends ItemView {
   nonWorkingDays: NonWorkingDays = {}
   showCriticalPath = false
   showBaseline = false
+  showWorkload = false
   /** Percent of the scale's day width. Kept per device, not in the view. */
   zoom = 100
   granularity: GanttGranularity
@@ -186,6 +187,7 @@ export class ProjectView extends ItemView {
   private daysButton: ChipButton | null = null
   private criticalButton: ChipButton | null = null
   private baselineButton: ChipButton | null = null
+  private workloadButton: ChipButton | null = null
   private keyScope: Scope
   private pendingRefresh: Promise<void> | null = null
   private initialized = false
@@ -579,6 +581,7 @@ export class ProjectView extends ItemView {
     )
     this.criticalButton?.setActive(this.showCriticalPath)
     this.baselineButton?.setActive(this.showBaseline)
+    this.workloadButton?.setActive(this.showWorkload)
     if (this.sortButton) syncSortButton(this.sortButton, this.sortSummary())
     this.header?.fit()
   }
@@ -1173,6 +1176,7 @@ export class ProjectView extends ItemView {
     this.daysButton = null
     this.criticalButton = null
     this.baselineButton = null
+    this.workloadButton = null
     for (const option of this.viewOptions(scope)) {
       if (option === 'zoom') {
         this.zoomStepper = new Stepper(parent, this.zoomProps())
@@ -1186,6 +1190,7 @@ export class ProjectView extends ItemView {
       if (option.id === 'days') this.daysButton = chip
       if (option.id === 'critical') this.criticalButton = chip
       if (option.id === 'baseline') this.baselineButton = chip
+      if (option.id === 'workload') this.workloadButton = chip
     }
   }
 
@@ -1234,6 +1239,13 @@ export class ProjectView extends ItemView {
           label: t('gantt.baseline'),
           chip: 'label',
           run: (anchor) => this.openBaselineMenu(anchor, scope)
+        },
+        {
+          id: 'workload',
+          icon: 'users',
+          label: t('gantt.workload'),
+          chip: 'label',
+          run: () => this.toggleWorkload()
         }
       )
     }
@@ -1263,6 +1275,14 @@ export class ProjectView extends ItemView {
     this.syncHeader()
     this.renderCurrentView()
     void this.persistFilter()
+  }
+
+  private toggleWorkload(): void {
+    this.showWorkload = !this.showWorkload
+    this.syncHeader()
+    if (this.subview instanceof GanttView) {
+      this.subview.setShowWorkload(this.showWorkload)
+    }
   }
 
   private openBaselineMenu(anchor: HTMLElement, scope: ProjectScope): void {
@@ -1701,7 +1721,8 @@ export class ProjectView extends ItemView {
           (zoom) => {
             this.zoom = zoom
             this.rememberZoom()
-          }
+          },
+          this.showWorkload
         )
         if (savedGanttScroll) gantt.setPendingScroll(savedGanttScroll)
         if (savedGanttLabelWidth !== null) gantt.setLabelWidth(savedGanttLabelWidth)

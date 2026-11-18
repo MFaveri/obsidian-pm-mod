@@ -7,6 +7,7 @@ import {
   computeBaselineVariance,
   computeDurationRisk,
   computeScopeCriticalPath,
+  computeTaskRollup,
   scheduleOptionsFor,
   shownFields,
   today,
@@ -26,7 +27,8 @@ import {
   drawMilestoneLabels,
   drawRowHover,
   drawSummaryBar,
-  drawTaskBar
+  drawTaskBar,
+  drawTaskSummaryBar
 } from '../gantt/bars'
 import type { GanttCanvas } from '../gantt/canvas'
 import { renderGridLines, renderTodayLine } from '../gantt/canvas'
@@ -163,11 +165,39 @@ function renderBody(container: HTMLElement, model: ViewModel, granularity: Gantt
     }
     const { task, depth, rowIndex } = item
     renderLabel(leftBody, model, task, depth)
-    if (!task.start && !task.due) continue
     const taskCfg = configOf(model, task.id)
     const taskStatuses = taskCfg.statuses
-    const schedOpts = scheduleOptionsFor(taskCfg, model.settings.holidays)
     const color = barColor(canvas, taskStatuses, task)
+
+    if (task.subtasks.length > 0) {
+      const rollup = computeTaskRollup(task, taskStatuses)
+      if (rollup && (rollup.hasDatedSubtasks || task.start || task.due)) {
+        drawRowHover(barsGroup, canvas, rowIndex)
+        drawTaskSummaryBar(
+          barsGroup,
+          canvas,
+          {
+            title: task.title,
+            color,
+            start: rollup.start,
+            due: rollup.due,
+            baselineStart: rollup.baselineStart,
+            baselineDue: rollup.baselineDue,
+            progress: rollup.progress,
+            doneSubtasks: rollup.doneSubtasks,
+            totalSubtasks: rollup.totalSubtasks,
+            collapsed: false,
+            aside: barAsideText(task, labelFields, labelSource)
+          },
+          rowIndex,
+          showBaseline
+        )
+        continue
+      }
+    }
+
+    if (!task.start && !task.due) continue
+    const schedOpts = scheduleOptionsFor(taskCfg, model.settings.holidays)
     const cpm = criticalPath.tasks[task.id]
     const criticalInfo: BarCriticalInfo | undefined = cpm
       ? { critical: cpm.critical, slackDays: cpm.slackDays, highlight: showCriticalPath }

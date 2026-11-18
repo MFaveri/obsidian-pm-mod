@@ -428,6 +428,149 @@ export function drawSummaryBar(
   return group
 }
 
+export interface TaskSummaryBarInput {
+  title: string
+  color: string
+  start: string
+  due: string
+  baselineStart?: string
+  baselineDue?: string
+  progress: number
+  doneSubtasks: number
+  totalSubtasks: number
+  collapsed: boolean
+  aside?: string
+}
+
+/**
+ * Task rollup summary bar for parent tasks spanning from earliest start to latest due across
+ * all descendant subtasks, with downward bracket caps, progress fill, and subtask counters.
+ */
+export function drawTaskSummaryBar(
+  g: SVGGElement,
+  canvas: GanttCanvas,
+  summary: TaskSummaryBarInput,
+  row: number,
+  showBaseline = false
+): SVGGElement | null {
+  const startDate = parsePlainDate(summary.start)
+  const endDate = parsePlainDate(summary.due)
+  const effectiveStart = startDate ?? endDate
+  if (!effectiveStart) return null
+  const effectiveEnd = (endDate ?? effectiveStart).add({ days: 1 })
+
+  const rowTop = HEADER_HEIGHT + row * ROW_HEIGHT
+  const barTop = rowTop + BAR_PADDING + 4
+  const barHeight = Math.max(6, ROW_HEIGHT - BAR_PADDING * 2 - 10)
+  const x = Math.max(0, dateToX(canvas.cfg, effectiveStart))
+  const xEnd = Math.min(canvas.cfg.totalWidth, dateToX(canvas.cfg, effectiveEnd))
+  const width = Math.max(10, xEnd - x)
+  const cap = 5
+  const color =
+    summary.color || getComputedStyle(canvas.svgEl).getPropertyValue('--interactive-accent').trim()
+
+  const group = svgEl('g', {
+    class: `pm-gantt-summary-group pm-gantt-task-summary-group${summary.collapsed ? ' pm-gantt-summary--collapsed' : ' pm-gantt-summary--expanded'}`
+  })
+  g.appendChild(group)
+
+  const track = svgEl('rect', {
+    x,
+    y: barTop,
+    width,
+    height: barHeight,
+    rx: 2,
+    ry: 2,
+    fill: color,
+    opacity: summary.collapsed ? 0.45 : 0.25,
+    class: 'pm-gantt-bar pm-gantt-bar--summary pm-gantt-task-summary-bar'
+  })
+  group.appendChild(track)
+
+  if (summary.progress > 0) {
+    group.appendChild(
+      svgEl('rect', {
+        x,
+        y: barTop,
+        width: (Math.min(100, summary.progress) / 100) * width,
+        height: barHeight,
+        rx: 2,
+        ry: 2,
+        fill: color,
+        opacity: summary.collapsed ? 0.95 : 0.85,
+        class: 'pm-gantt-summary-progress'
+      })
+    )
+  }
+
+  const capY = barTop + barHeight
+  group.appendChild(
+    svgEl('polygon', {
+      points: `${x},${barTop} ${x + cap * 2},${barTop} ${x},${capY + cap}`,
+      fill: color,
+      class: 'pm-gantt-summary-cap'
+    })
+  )
+  group.appendChild(
+    svgEl('polygon', {
+      points: `${x + width - cap * 2},${barTop} ${x + width},${barTop} ${x + width},${capY + cap}`,
+      fill: color,
+      class: 'pm-gantt-summary-cap'
+    })
+  )
+
+  const asideContent =
+    summary.aside ||
+    (summary.collapsed ? `${summary.doneSubtasks}/${summary.totalSubtasks} (${summary.progress}%)` : '')
+  if (asideContent) {
+    const labelX = x + width + 8
+    const labelY = barTop + barHeight / 2 + 4
+    if (labelX < canvas.cfg.totalWidth - 30) {
+      const aside = svgEl('text', {
+        x: labelX,
+        y: labelY,
+        class: 'pm-gantt-bar-aside pm-gantt-summary-aside'
+      })
+      aside.textContent = asideContent
+      group.appendChild(aside)
+    }
+  }
+
+  if (showBaseline && summary.baselineStart && summary.baselineDue) {
+    const bStart = parsePlainDate(summary.baselineStart)
+    const bDue = parsePlainDate(summary.baselineDue)
+    if (bStart && bDue) {
+      const bEffEnd = (Temporal.PlainDate.compare(bDue, bStart) < 0 ? bStart : bDue).add({ days: 1 })
+      const bx = Math.max(0, dateToX(canvas.cfg, bStart))
+      const bxEnd = Math.min(canvas.cfg.totalWidth, dateToX(canvas.cfg, bEffEnd))
+      const bw = Math.max(6, bxEnd - bx)
+      group.appendChild(
+        svgEl('rect', {
+          x: bx,
+          y: barTop + barHeight + 3,
+          width: bw,
+          height: 3,
+          rx: 1.5,
+          ry: 1.5,
+          class: 'pm-gantt-baseline-bar',
+          'pointer-events': 'none'
+        })
+      )
+    }
+  }
+
+  const tooltip = svgEl('title', {})
+  const summaryLines = [
+    `${summary.title} (${summary.collapsed ? t('gantt.collapsedRollup') : t('gantt.expandedRollup')})`,
+    `${t('gantt.tooltipStart', { date: summary.start || '—' })}  ${t('gantt.tooltipDue', { date: summary.due || '—' })}`,
+    t('gantt.rollupSubtasks', { done: summary.doneSubtasks, total: summary.totalSubtasks, progress: summary.progress })
+  ]
+  tooltip.textContent = summaryLines.join('\n')
+  group.appendChild(tooltip)
+
+  return group
+}
+
 export function drawMilestoneDiamond(
   g: SVGGElement,
   canvas: GanttCanvas,

@@ -378,3 +378,76 @@
   color: var(--color-orange, var(--color-red));
   white-space: nowrap;
 }
+
+.pm-overview-workload-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+.pm-overview-workload-card {
+  padding: 10px 12px;
+  border-radius: var(--radius-m);
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pm-overview-workload-card--alert {
+  border-color: color-mix(in srgb, var(--color-orange, var(--color-red)) 40%, transparent);
+  background: color-mix(in srgb, var(--color-orange, var(--color-red)) 5%, var(--background-secondary));
+}
+.pm-overview-workload-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.pm-overview-workload-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.pm-overview-workload-name {
+  font-weight: 500;
+  font-size: var(--font-ui-small);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pm-overview-workload-meta {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+.pm-overview-workload-conflicts {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--background-modifier-border-focus, var(--background-modifier-border));
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--font-ui-smaller);
+}
+.pm-overview-workload-conflict-label {
+  font-weight: 500;
+  color: var(--color-orange, var(--color-red));
+}
+.pm-overview-workload-conflict-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pm-overview-workload-conflict-link {
+  font-weight: 500;
+  color: var(--text-accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.15s;
+}
+.pm-overview-workload-conflict-link:hover {
+  text-decoration-color: currentColor;
+}

@@ -6,6 +6,7 @@ import {
   type Task,
   computeBaselineVariance,
   computeDurationRisk,
+  computeTaskRollup,
   getDependencySpec,
   pruneDependencyLinks,
   t
@@ -23,6 +24,7 @@ import {
   drawMilestoneLabels,
   drawRowHover,
   drawTaskBar,
+  drawTaskSummaryBar,
   ROW_HEIGHT,
   HEADER_HEIGHT,
   BAR_PADDING,
@@ -62,13 +64,52 @@ function durationInfoFor(task: Task, ctx: RendererContext): BarDurationInfo | un
 export function renderTaskBar(g: SVGGElement, task: Task, row: number, _depth: number, ctx: RendererContext): void {
   const project = ctx.scope.projectOf(task.id)
   if (!project) return
+
+  const taskStatuses = ctx.scope.configOf(task.id).statuses
+  const color = barColor(ctx, taskStatuses, task)
+
+  if (task.subtasks.length > 0) {
+    const rollup = computeTaskRollup(task, taskStatuses)
+    if (rollup && (rollup.hasDatedSubtasks || task.start || task.due)) {
+      drawRowHover(g, ctx, row)
+      const collapsed = ctx.collapsedIds.has(task.id)
+      const barEl = drawTaskSummaryBar(
+        g,
+        ctx,
+        {
+          title: task.title,
+          color,
+          start: rollup.start,
+          due: rollup.due,
+          baselineStart: rollup.baselineStart,
+          baselineDue: rollup.baselineDue,
+          progress: rollup.progress,
+          doneSubtasks: rollup.doneSubtasks,
+          totalSubtasks: rollup.totalSubtasks,
+          collapsed,
+          aside: barAsideText(task, ctx.labelFields, ctx.labelSource)
+        },
+        row,
+        ctx.showBaseline
+      )
+      if (barEl) {
+        barEl.addEventListener('click', (e: MouseEvent) => {
+          e.stopPropagation()
+          openTaskModal(ctx.plugin, project, {
+            task,
+            onSave: () => ctx.onRefresh()
+          })
+        })
+      }
+      return
+    }
+  }
+
   if (!task.start && !task.due) {
     renderEmptyRowClickTarget(g, task, row, ctx)
     return
   }
 
-  const taskStatuses = ctx.scope.configOf(task.id).statuses
-  const color = barColor(ctx, taskStatuses, task)
   drawRowHover(g, ctx, row)
 
   if (task.type === 'milestone') {
@@ -90,6 +131,9 @@ export function renderTaskBar(g: SVGGElement, task: Task, row: number, _depth: n
   )
   if (!drawn) return
   const { barGroup, rect, x, y, width, height } = drawn
+  if (ctx.showWorkload && ctx.overloadedTaskIds?.has(task.id)) {
+    barGroup.addClass('pm-gantt-bar--overload')
+  }
 
   const HANDLE_W = 8
   for (const side of ['left', 'right'] as const) {

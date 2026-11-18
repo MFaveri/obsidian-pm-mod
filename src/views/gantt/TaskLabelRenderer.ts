@@ -21,6 +21,8 @@ export interface LabelContext {
   collapsedIds: ReadonlySet<string>
   criticalPath?: CriticalPathResult
   showCriticalPath?: boolean
+  showWorkload?: boolean
+  overloadedTaskIds?: ReadonlySet<string>
   onRefresh: () => Promise<void>
 }
 
@@ -132,6 +134,10 @@ export function renderTaskLabel(
     openTaskModal(ctx.plugin, project, { task, onSave: () => ctx.onRefresh() })
   })
 
+  if (task.subtasks.length > 0 && ctx.collapsedIds.has(task.id)) {
+    el.createSpan({ text: `(${task.subtasks.length})`, cls: 'pm-gantt-label-count' })
+  }
+
   // A predecessor outside this view draws no arrow, so the row says it is there.
   const elsewhere = task.dependencies
     .filter((id) => !ctx.scope.taskById(id))
@@ -182,6 +188,16 @@ export function renderTaskLabel(
       )
       badge.setAttribute('title', cpm.critical ? t('gantt.tooltipCritical') : tn('gantt.tooltipSlack', cpm.slackDays))
     }
+  }
+
+  if (ctx.showWorkload && ctx.overloadedTaskIds?.has(task.id)) {
+    const tip = t('gantt.workloadOverloadTooltip', { assignee: task.assignees.join(', ') })
+    const badge = el.createSpan({
+      text: t('gantt.workloadOverloadBadge'),
+      cls: 'pm-gantt-label-slack pm-gantt-label-slack--critical pm-gantt-label-overload'
+    })
+    badge.setAttribute('aria-label', tip)
+    badge.setAttribute('title', tip)
   }
 
   if (task.progress > 0) {

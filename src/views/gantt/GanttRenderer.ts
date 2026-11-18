@@ -22,6 +22,9 @@ export interface RendererContext extends GanttCanvas {
   criticalPath: CriticalPathResult
   showCriticalPath: boolean
   showBaseline: boolean
+  showWorkload?: boolean
+  overloadedTaskIds?: ReadonlySet<string>
+  collapsedIds: ReadonlySet<string>
   scheduleOptionsOf: (taskId: string) => ScheduleOptions
   drag: DragState
   link: LinkState
