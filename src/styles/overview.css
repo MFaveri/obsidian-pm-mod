@@ -348,3 +348,33 @@
   font-size: var(--font-ui-smaller);
   color: var(--text-faint);
 }
+
+.pm-overview-risk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.pm-overview-risk-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  border-radius: var(--radius-s);
+  border: 1px solid color-mix(in srgb, var(--color-orange, var(--color-red)) 35%, transparent);
+  background: color-mix(in srgb, var(--color-orange, var(--color-red)) 8%, transparent);
+  font-size: var(--font-ui-smaller);
+  cursor: pointer;
+}
+.pm-overview-risk-row:hover {
+  background: color-mix(in srgb, var(--color-orange, var(--color-red)) 14%, transparent);
+}
+.pm-overview-risk-title {
+  font-weight: 500;
+  color: var(--text-normal);
+}
+.pm-overview-risk-detail {
+  color: var(--color-orange, var(--color-red));
+  white-space: nowrap;
+}

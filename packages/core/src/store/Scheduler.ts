@@ -817,3 +817,111 @@ export function computeDurationRisk(task: Task, options: ScheduleOptions = {}): 
     projectedDue
   }
 }
+
+export interface ScopeScheduleProject {
+  tasks: Task[]
+  config: Pick<
+    ResolvedProjectConfig,
+    | 'statuses'
+    | 'scheduleWorkdaysOnly'
+    | 'pullForwardOnEarlyFinish'
+    | 'workingWeekdays'
+    | 'extraWorkdays'
+    | 'extraNonWorkdays'
+  >
+}
+
+export function computeScopeCriticalPath(
+  projects: readonly ScopeScheduleProject[],
+  holidays: string[] = [],
+  externalTasks: Task[] = []
+): CriticalPathResult {
+  const primary = projects[0]
+  if (!primary) {
+    return { projectFinish: '', tasks: {}, criticalTaskIds: [], criticalEdges: [], cycles: [] }
+  }
+  const single = projects.length === 1
+  const statuses = primary.config.statuses
+  const baseOpts = scheduleOptionsFor(primary.config, holidays)
+  const opts: CriticalPathOptions = single
+    ? { ...baseOpts, pullForward: primary.config.pullForwardOnEarlyFinish }
+    : {
+        ...baseOpts,
+        workdaysOnly: projects.some((p) => p.config.scheduleWorkdaysOnly),
+        extraWorkdays: projects.flatMap((p) => p.config.extraWorkdays),
+        extraNonWorkdays: projects.flatMap((p) => p.config.extraNonWorkdays),
+        pullForward: projects.some((p) => p.config.pullForwardOnEarlyFinish)
+      }
+  return computeCriticalPath(
+    projects.flatMap((p) => p.tasks),
+    statuses,
+    externalTasks,
+    opts
+  )
+}
+
+export interface ScheduleHealthSummary {
+  criticalPath: CriticalPathResult
+  criticalTasks: Task[]
+  baselineTrackedCount: number
+  baselineLateCount: number
+  baselineAheadCount: number
+  baselineOnTimeCount: number
+  maxBaselineSlipDays: number
+  durationRisks: { task: Task; risk: DurationRisk }[]
+}
+
+export function computeScheduleHealth(
+  tasks: Task[],
+  config: ResolvedProjectConfig,
+  holidays: string[] = [],
+  externalTasks: Task[] = []
+): ScheduleHealthSummary {
+  const opts = scheduleOptionsFor(config, holidays)
+  const criticalPath = computeCriticalPath(tasks, config.statuses, externalTasks, opts)
+  const flatActive = flattenTasks(tasks)
+    .map((entry) => entry.task)
+    .filter((task) => !task.archived && task.status !== 'superseded')
+
+  const taskMap = new Map(flatActive.map((task) => [task.id, task]))
+  const criticalTasks = criticalPath.criticalTaskIds
+    .map((id) => taskMap.get(id))
+    .filter((task): task is Task => task !== undefined)
+
+  let baselineTrackedCount = 0
+  let baselineLateCount = 0
+  let baselineAheadCount = 0
+  let baselineOnTimeCount = 0
+  let maxBaselineSlipDays = 0
+  const durationRisks: { task: Task; risk: DurationRisk }[] = []
+
+  for (const task of flatActive) {
+    const variance = computeBaselineVariance(task, opts)
+    if (variance) {
+      baselineTrackedCount++
+      if (variance.dueDeltaDays > 0) {
+        baselineLateCount++
+        if (variance.dueDeltaDays > maxBaselineSlipDays) maxBaselineSlipDays = variance.dueDeltaDays
+      } else if (variance.dueDeltaDays < 0) {
+        baselineAheadCount++
+      } else {
+        baselineOnTimeCount++
+      }
+    }
+    const risk = computeDurationRisk(task, opts)
+    if (risk && !isTerminalStatus(task.status, config.statuses)) {
+      durationRisks.push({ task, risk })
+    }
+  }
+
+  return {
+    criticalPath,
+    criticalTasks,
+    baselineTrackedCount,
+    baselineLateCount,
+    baselineAheadCount,
+    baselineOnTimeCount,
+    maxBaselineSlipDays,
+    durationRisks
+  }
+}

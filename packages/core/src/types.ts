@@ -37,7 +37,17 @@ export const CUSTOM_FIELD_TYPES = [
   'url'
 ] as const
 
-export const SORT_KEYS = ['title', 'status', 'priority', 'due', 'assignees', 'progress'] as const
+export const SORT_KEYS = [
+  'title',
+  'status',
+  'priority',
+  'due',
+  'assignees',
+  'progress',
+  'duration',
+  'slack',
+  'baseline'
+] as const
 export type SortKey = (typeof SORT_KEYS)[number]
 
 /** One key of a sort; a view sorts by up to `MAX_SORT_RULES` of them, first rule first. */

@@ -241,4 +241,49 @@ describe('snapshot gantt', () => {
     expect(host.querySelectorAll('.pm-gantt-project-row').length).toBe(2)
     expect(host.querySelectorAll('.pm-gantt-summary-bar').length).toBe(2)
   })
+
+  it('renders critical path, baseline bars, duration risk overlays, and schedule table columns in snapshots', () => {
+    const base = model()
+    const a = makeTask({
+      id: 'a',
+      title: 'Start task',
+      status: 'todo',
+      start: '2026-04-01',
+      due: '2026-04-03',
+      baselineStart: '2026-04-01',
+      baselineDue: '2026-04-02',
+      durationDays: 5
+    })
+    const b = makeTask({
+      id: 'b',
+      title: 'Follow-up',
+      status: 'todo',
+      start: '2026-04-03',
+      due: '2026-04-06',
+      dependencies: ['a'],
+      dependencyLinks: { a: { type: 'SS', lagDays: 2 } }
+    })
+    const m = model({
+      projects: [{ ...base.projects[0], tasks: [a, b] }],
+      fields: { table: { visible: ['title', 'duration', 'slack', 'baseline'] } },
+      settings: {
+        ...base.settings,
+        showCriticalPath: true,
+        showBaseline: true
+      }
+    })
+
+    const ganttHost = document.body.createDiv()
+    renderSnapshotGantt(ganttHost, m)
+    expect(ganttHost.querySelectorAll('.pm-gantt-bar--critical').length).toBe(2)
+    expect(ganttHost.querySelectorAll('.pm-gantt-baseline-bar--late').length).toBe(1)
+    expect(ganttHost.querySelectorAll('.pm-gantt-duration-overflow').length).toBe(1)
+    expect(ganttHost.querySelector('.pm-gantt-arrow-badge')?.textContent).toBe('SS +2d')
+
+    const tableHost = document.body.createDiv()
+    renderSnapshotTable(tableHost, m)
+    expect(tableHost.querySelectorAll('.pm-metric-badge--critical').length).toBe(2)
+    expect(tableHost.querySelector('.pm-table-cell-duration .pm-metric-badge--warn')?.textContent).toBe('5d (!)')
+    expect(tableHost.querySelector('.pm-table-cell-baseline .pm-metric-badge--warn')?.textContent).toBe('+1d')
+  })
 })

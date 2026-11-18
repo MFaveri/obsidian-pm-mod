@@ -528,3 +528,28 @@ button.pm-chip-rm {
 .pm-table-add-row td {
   padding: 8px 10px;
 }
+
+.pm-table-cell-muted {
+  color: var(--text-faint);
+}
+.pm-metric-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: var(--radius-s);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pm-metric-badge--critical {
+  color: var(--color-red);
+  background: color-mix(in srgb, var(--color-red) 14%, transparent);
+}
+.pm-metric-badge--warn {
+  color: var(--color-orange, var(--color-red));
+  background: color-mix(in srgb, var(--color-orange, var(--color-red)) 14%, transparent);
+}
+.pm-metric-badge--ok {
+  color: var(--color-green);
+  background: color-mix(in srgb, var(--color-green) 14%, transparent);
+}

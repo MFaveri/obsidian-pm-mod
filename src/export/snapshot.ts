@@ -33,6 +33,8 @@ export interface ExportViewState {
   nonWorkingDays: NonWorkingDays
   filter: FilterState
   ganttGranularity: GanttGranularity
+  showCriticalPath?: boolean
+  showBaseline?: boolean
 }
 
 /** Icons the page chrome and the composites ask for by name, whatever the data holds. */
@@ -121,7 +123,14 @@ export async function buildSnapshot(plugin: PMPlugin, scope: ProjectScope, view:
     iconNames.add(project.icon)
     projects.push({
       ...toProjectResource(project, config, summarize(plugin, project)),
-      tasks: taskResources(project, project.id, true)
+      tasks: taskResources(project, project.id, true),
+      schedule: {
+        scheduleWorkdaysOnly: config.scheduleWorkdaysOnly,
+        pullForwardOnEarlyFinish: config.pullForwardOnEarlyFinish,
+        workingWeekdays: [...config.workingWeekdays],
+        extraWorkdays: [...config.extraWorkdays],
+        extraNonWorkdays: [...config.extraNonWorkdays]
+      }
     })
   }
 
@@ -141,7 +150,9 @@ export async function buildSnapshot(plugin: PMPlugin, scope: ProjectScope, view:
       group: view.group,
       fields: view.fields,
       nonWorkingDays: view.nonWorkingDays,
-      ganttGranularity: view.ganttGranularity
+      ganttGranularity: view.ganttGranularity,
+      ...(view.showCriticalPath ? { showCriticalPath: true } : {}),
+      ...(view.showBaseline ? { showBaseline: true } : {})
     },
     settings: {
       priorityIcons: config.priorityIcons,

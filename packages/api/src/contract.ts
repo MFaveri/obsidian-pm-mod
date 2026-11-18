@@ -1,4 +1,4 @@
-import type { CustomFieldDef, PriorityConfig, Recurrence, StatusConfig, TaskType, TimeLog } from '@dotpm/core'
+import type { CustomFieldDef, DependencySpec, PriorityConfig, Recurrence, StatusConfig, TaskType, TimeLog } from '@dotpm/core'
 
 /** What a listing shows for a project, cheap enough to serve without loading it. */
 export interface ProjectSummary {
@@ -38,11 +38,15 @@ export interface TaskResource {
   priority: string
   start: string
   due: string
+  durationDays?: number
+  baselineStart?: string
+  baselineDue?: string
   completed: string
   progress: number
   assignees: string[]
   tags: string[]
   dependencies: string[]
+  dependencyLinks?: Record<string, DependencySpec>
   recurrence: Recurrence | null
   timeEstimate: number | null
   timeLogs: TimeLog[]

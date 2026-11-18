@@ -2,6 +2,7 @@ import {
   type CustomFieldDef,
   type FlatTask,
   applyTaskFilterFlat,
+  computeScopeCriticalPath,
   dueUrgency,
   excludeSupersededTasks,
   flattenTasks,
@@ -11,6 +12,7 @@ import {
   isQueryActive,
   isTerminalStatus,
   columnWidth,
+  scheduleOptionsFor,
   shownFields,
   stringifyCustomValue,
   totalLoggedHours,
@@ -24,6 +26,7 @@ import { ExpandCell } from '../composites/cells/ExpandCell'
 import { PriorityCell } from '../composites/cells/PriorityCell'
 import { ProgressCell } from '../composites/cells/ProgressCell'
 import { ProjectCell } from '../composites/cells/ProjectCell'
+import { ScheduleMetricCell } from '../composites/cells/ScheduleMetricCell'
 import { StatusCell } from '../composites/cells/StatusCell'
 import { TimeCell } from '../composites/cells/TimeCell'
 import { TitleCell } from '../composites/cells/TitleCell'
@@ -69,8 +72,15 @@ export function tableRows(model: ViewModel): TreeRow[] {
     list.push(f)
     childrenByParent.set(bucket, list)
   }
+  const criticalPath = computeScopeCriticalPath(model.projects, model.settings.holidays)
+  const scheduleOptionsOf = (taskId: string) => scheduleOptionsFor(configOf(model, taskId), model.settings.holidays)
   for (const list of childrenByParent.values()) {
-    list.sort((a, b) => compareTasks(a.task, b.task, model.sort, config.statuses, config.priorities))
+    list.sort((a, b) =>
+      compareTasks(a.task, b.task, model.sort, config.statuses, config.priorities, {
+        criticalPath,
+        scheduleOptionsOf
+      })
+    )
   }
 
   const rows: TreeRow[] = []
@@ -130,6 +140,7 @@ export function renderSnapshotTable(container: HTMLElement, model: ViewModel): H
   }
 
   const tbody = table.createEl('tbody')
+  const criticalPath = computeScopeCriticalPath(model.projects, model.settings.holidays)
   for (const flat of tableRows(model)) {
     const { task, depth } = flat
     const owner = projectOf(model, task.id)
@@ -191,6 +202,16 @@ export function renderSnapshotTable(container: HTMLElement, model: ViewModel): H
           break
         case 'time':
           new TimeCell(row, { logged: totalLoggedHours(task), estimate: task.timeEstimate ?? 0 })
+          break
+        case 'duration':
+        case 'slack':
+        case 'baseline':
+          new ScheduleMetricCell(row, {
+            kind: id,
+            task,
+            scheduleOptions: scheduleOptionsFor(ownConfig, model.settings.holidays),
+            criticalInfo: criticalPath.tasks[task.id]
+          })
           break
         default: {
           const cf = customFields.find((field) => `cf:${field.id}` === id)

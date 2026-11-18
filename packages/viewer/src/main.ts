@@ -49,11 +49,11 @@ export function viewModelFromSnapshot(snapshot: Snapshot): ViewModel {
         priorityIcons: snapshot.settings.priorityIcons,
         defaultView: snapshot.view.mode,
         autoSchedule: false,
-        pullForwardOnEarlyFinish: false,
-        scheduleWorkdaysOnly: false,
-        workingWeekdays: [1, 2, 3, 4, 5],
-        extraWorkdays: [],
-        extraNonWorkdays: [],
+        pullForwardOnEarlyFinish: project.schedule?.pullForwardOnEarlyFinish ?? false,
+        scheduleWorkdaysOnly: project.schedule?.scheduleWorkdaysOnly ?? false,
+        workingWeekdays: project.schedule?.workingWeekdays ?? [1, 2, 3, 4, 5],
+        extraWorkdays: project.schedule?.extraWorkdays ?? [],
+        extraNonWorkdays: project.schedule?.extraNonWorkdays ?? [],
         autoArchiveDays: 0,
         showSubtreeConnections: snapshot.settings.showSubtreeConnections,
         lineBorders: snapshot.settings.lineBorders
@@ -62,7 +62,9 @@ export function viewModelFromSnapshot(snapshot: Snapshot): ViewModel {
     settings: {
       ...snapshot.settings,
       ganttGranularity: snapshot.view.ganttGranularity,
-      holidays: snapshot.settings.holidays ?? []
+      holidays: snapshot.settings.holidays ?? [],
+      showCriticalPath: snapshot.view.showCriticalPath,
+      showBaseline: snapshot.view.showBaseline
     },
     nonWorkingDays: hydrateNonWorkingDays(snapshot.view.nonWorkingDays),
     filter: hydrateFilter(snapshot.view.filter),

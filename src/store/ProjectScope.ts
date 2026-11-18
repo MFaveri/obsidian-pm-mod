@@ -1,4 +1,5 @@
 import {
+  type CriticalPathResult,
   type CustomFieldDef,
   type FieldCatalog,
   type FilterContext,
@@ -6,10 +7,14 @@ import {
   type PriorityConfig,
   type Project,
   type ResolvedProjectConfig,
+  type ScheduleOptions,
   type StatusConfig,
   type Task,
+  computeDurationRisk,
+  computeScopeCriticalPath,
   findTaskById,
   flattenTasks,
+  scheduleOptionsFor,
   t,
   tn
 } from '@dotpm/core'
@@ -198,6 +203,18 @@ export class ProjectScope {
     return owner ? this.configOfProject(owner) : this.config
   }
 
+  scheduleOptionsOf(taskId: string, holidays: string[] = []): ScheduleOptions {
+    return scheduleOptionsFor(this.configOf(taskId), holidays)
+  }
+
+  criticalPath(holidays: string[] = [], externalTasks: Task[] = []): CriticalPathResult {
+    return computeScopeCriticalPath(
+      this.projects.map((p) => ({ tasks: p.tasks, config: this.configOfProject(p) })),
+      holidays,
+      externalTasks
+    )
+  }
+
   /**
    * Columns only, so every project in scope lines up on one header row. Editing a value
    * asks `configOf` instead, because an overridden field carries its own type and options.
@@ -213,12 +230,19 @@ export class ProjectScope {
   }
 
   /** What a filter condition needs to match the tasks in scope. */
-  filterContext(keyOf: (raw: string) => string): FilterContext {
+  filterContext(keyOf: (raw: string) => string, holidays: string[] = [], externalTasks: Task[] = []): FilterContext {
+    let cachedCpm: CriticalPathResult | null = null
+    const ensureCpm = (): CriticalPathResult => {
+      if (!cachedCpm) cachedCpm = this.criticalPath(holidays, externalTasks)
+      return cachedCpm
+    }
     return {
       statuses: this.config.statuses,
       customFields: this.customFields(),
       keyOf,
-      projectOf: (task) => this.projectOf(task.id)?.id
+      projectOf: (task) => this.projectOf(task.id)?.id,
+      criticalInfoOf: (task) => ensureCpm().tasks[task.id],
+      durationRiskOf: (task) => computeDurationRisk(task, this.scheduleOptionsOf(task.id, holidays)) !== null
     }
   }
 

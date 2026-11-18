@@ -4,6 +4,10 @@ import {
   type ProjectSpanSummary,
   type Task,
   buildGanttRows,
+  computeBaselineVariance,
+  computeDurationRisk,
+  computeScopeCriticalPath,
+  scheduleOptionsFor,
   shownFields,
   today,
   t
@@ -12,6 +16,9 @@ import { svgEl } from '#dom'
 import { SegmentedControl } from '#primitives/SegmentedControl'
 import { renderStatusDot } from '../StatusBadge'
 import {
+  type BarBaselineInfo,
+  type BarCriticalInfo,
+  type BarDurationInfo,
   barAsideText,
   barColor,
   drawDependencyArrows,
@@ -86,13 +93,20 @@ function renderBody(container: HTMLElement, model: ViewModel, granularity: Gantt
   const taskRows = items
     .filter((item): item is Extract<GanttRowItem<(typeof projects)[number]>, { kind: 'task' }> => item.kind === 'task')
     .map((item) => ({ task: item.task, depth: item.depth, row: item.rowIndex }))
-  const cfg = buildTimelineConfig(timelineTasks, granularity, {
-    isHidden: nonWorkingDay(model.nonWorkingDays, model.settings.holidays)
-  })
   const config = mergedConfig(model)
+  const extraWorkdays = model.projects.flatMap((p) => p.config.extraWorkdays)
+  const extraNonWorkdays = model.projects.flatMap((p) => p.config.extraNonWorkdays)
+  const workingWeekdays = model.projects.length === 1 ? model.projects[0].config.workingWeekdays : undefined
+  const scheduleDaysOpts = { workingWeekdays, extraWorkdays, extraNonWorkdays }
+  const cfg = buildTimelineConfig(timelineTasks, granularity, {
+    isHidden: nonWorkingDay(model.nonWorkingDays, model.settings.holidays, scheduleDaysOpts)
+  })
   const statuses = config.statuses
   const labelFields = shownFields(model.fields, 'gantt', fieldCatalogOf(model)).filter((id) => id !== 'title')
   const labelSource = { statuses, priorities: config.priorities, customFields: customFieldColumns(model) }
+  const criticalPath = computeScopeCriticalPath(model.projects, model.settings.holidays)
+  const showCriticalPath = model.settings.showCriticalPath === true
+  const showBaseline = model.settings.showBaseline === true
 
   const wrapper = container.createDiv('pm-gantt-wrapper')
   const leftPanel = wrapper.createDiv('pm-gantt-left')
@@ -114,7 +128,20 @@ function renderBody(container: HTMLElement, model: ViewModel, granularity: Gantt
   const canvasSvg = svgEl('svg', { width: cfg.totalWidth, height: svgHeight, class: 'pm-gantt-svg' })
   svgContainer.appendChild(canvasSvg)
 
-  const canvas: GanttCanvas = { svgEl: canvasSvg, headerSvgEl, cfg, weekLabel: model.settings.ganttWeekLabel }
+  const canvas: GanttCanvas = {
+    svgEl: canvasSvg,
+    headerSvgEl,
+    cfg,
+    weekLabel: model.settings.ganttWeekLabel,
+    dayKind: (date) => {
+      const iso = date.toString()
+      if (extraNonWorkdays.includes(iso)) return 'time-off'
+      if (extraWorkdays.includes(iso)) return 'extra-working'
+      if (model.settings.holidays.includes(iso)) return 'time-off'
+      const isOff = nonWorkingDay(model.nonWorkingDays, model.settings.holidays, scheduleDaysOpts)?.(date)
+      return isOff ? 'off-week' : 'working'
+    }
+  }
   renderTimelineHeader(canvas)
   renderGridLines(canvas, items.length)
   renderTodayLine(canvas, svgHeight)
@@ -129,20 +156,47 @@ function renderBody(container: HTMLElement, model: ViewModel, granularity: Gantt
         barsGroup,
         canvas,
         { title: item.project.title, color: item.project.color, ...item.summary },
-        item.rowIndex
+        item.rowIndex,
+        showBaseline
       )
       continue
     }
     const { task, depth, rowIndex } = item
     renderLabel(leftBody, model, task, depth)
     if (!task.start && !task.due) continue
-    const taskStatuses = configOf(model, task.id).statuses
+    const taskCfg = configOf(model, task.id)
+    const taskStatuses = taskCfg.statuses
+    const schedOpts = scheduleOptionsFor(taskCfg, model.settings.holidays)
     const color = barColor(canvas, taskStatuses, task)
+    const cpm = criticalPath.tasks[task.id]
+    const criticalInfo: BarCriticalInfo | undefined = cpm
+      ? { critical: cpm.critical, slackDays: cpm.slackDays, highlight: showCriticalPath }
+      : undefined
+    const variance = computeBaselineVariance(task, schedOpts)
+    const baselineInfo: BarBaselineInfo | undefined = variance ? { ...variance, showBar: showBaseline } : undefined
+    const durationInfo: BarDurationInfo | undefined = computeDurationRisk(task, schedOpts) ?? undefined
     drawRowHover(barsGroup, canvas, rowIndex)
-    if (task.type === 'milestone') drawMilestoneDiamond(barsGroup, canvas, task, rowIndex, color)
-    else drawTaskBar(barsGroup, canvas, taskStatuses, task, rowIndex, color, barAsideText(task, labelFields, labelSource))
+    if (task.type === 'milestone') {
+      drawMilestoneDiamond(barsGroup, canvas, task, rowIndex, color, criticalInfo, baselineInfo)
+    } else {
+      drawTaskBar(
+        barsGroup,
+        canvas,
+        taskStatuses,
+        task,
+        rowIndex,
+        color,
+        barAsideText(task, labelFields, labelSource),
+        criticalInfo,
+        baselineInfo,
+        durationInfo
+      )
+    }
   }
-  drawDependencyArrows(canvas, taskRows)
+  const criticalEdges = showCriticalPath
+    ? new Set(criticalPath.criticalEdges.map(([from, to]) => `${from}->${to}`))
+    : undefined
+  drawDependencyArrows(canvas, taskRows, criticalEdges)
   drawMilestoneLabels(canvas, statuses, taskRows, items.length)
 
   leftPanel.addEventListener(

@@ -227,6 +227,7 @@ export class TableView implements SubView {
 
   private makeTableContext() {
     const config = this.scope.config
+    const holidays = this.plugin.settings.holidays
     return {
       container: this.container,
       scope: this.scope,
@@ -239,6 +240,8 @@ export class TableView implements SubView {
       collapsedIds: collapsedTaskIds(this.plugin.settings, this.scope.projects),
       columns: shownFields(this.fields, 'table', this.scope.fieldCatalog()),
       fields: this.fields,
+      criticalPath: this.scope.criticalPath(holidays),
+      scheduleOptionsOf: (taskId: string) => this.scope.scheduleOptionsOf(taskId, holidays),
       state: this.state,
       onRefresh: this.onRefresh,
       onSelectionChange: () => {

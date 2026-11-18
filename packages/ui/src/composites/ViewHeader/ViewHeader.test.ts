@@ -180,6 +180,9 @@ describe('FilterBar', () => {
       'Start date',
       'Type',
       'Title',
+      'Critical path',
+      'Slack (days)',
+      'Duration risk',
       'Estimate',
       'Include archived'
     ])

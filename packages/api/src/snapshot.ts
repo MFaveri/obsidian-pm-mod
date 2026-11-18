@@ -20,6 +20,13 @@ const READABLE_VERSIONS: unknown[] = [1, SNAPSHOT_VERSION]
 
 export interface SnapshotProject extends ProjectResource {
   tasks: TaskResource[]
+  schedule?: {
+    scheduleWorkdaysOnly?: boolean
+    pullForwardOnEarlyFinish?: boolean
+    workingWeekdays?: number[]
+    extraWorkdays?: string[]
+    extraNonWorkdays?: string[]
+  }
 }
 
 export interface SnapshotView {
@@ -35,6 +42,8 @@ export interface SnapshotView {
   ganttGranularity: GanttGranularity
   /** Absent on a page exported before the timeline could leave days out. */
   nonWorkingDays?: NonWorkingDays
+  showCriticalPath?: boolean
+  showBaseline?: boolean
 }
 
 export interface SnapshotSettings {

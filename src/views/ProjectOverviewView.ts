@@ -6,11 +6,13 @@ import {
   type ResolvedProjectConfig,
   type Task,
   collectAllTags,
+  computeScheduleHealth,
   excludeSupersededTasks,
   flattenTasks,
   totalLoggedHours,
   Temporal,
   formatDateLong,
+  formatDateShort,
   parsePlainDate,
   today,
   dateUrgency,
@@ -20,6 +22,7 @@ import {
   tn
 } from '@dotpm/core'
 import { personKeyer, type ProjectRef } from '#store'
+import { openTaskModal } from '#ui/ModalFactory'
 import {
   safeAsync,
   Avatar,
@@ -162,6 +165,7 @@ export class ProjectOverviewView extends ItemView {
     const side = grid.createDiv('pm-overview-side')
 
     this.renderMetrics(main, project, rollup)
+    this.renderScheduleHealth(main, project, config)
     this.renderDescription(main, project)
     this.renderMilestones(main, tasks, config)
     this.renderSubProjects(main, project)
@@ -289,6 +293,74 @@ export class ProjectOverviewView extends ItemView {
       }
     ]
     renderMetricStrip(parent, stats)
+  }
+
+  private renderScheduleHealth(parent: HTMLElement, project: Project, config: ResolvedProjectConfig): void {
+    const health = computeScheduleHealth(project.tasks, config, this.plugin.settings.holidays)
+    const section = this.section(
+      parent,
+      t('overview.scheduleHealth'),
+      health.criticalPath.projectFinish
+        ? `${t('overview.projectedFinish')}: ${formatDateShort(health.criticalPath.projectFinish)}`
+        : ''
+    )
+
+    const stats: MetricStat[] = [
+      {
+        label: t('overview.criticalTasks'),
+        value: String(health.criticalTasks.length),
+        sub: health.criticalPath.projectFinish
+          ? `${t('overview.projectedFinish')}: ${formatDateShort(health.criticalPath.projectFinish)}`
+          : t('overview.noCriticalPath')
+      },
+      {
+        label: t('overview.baselineStatus'),
+        value: health.baselineTrackedCount
+          ? health.baselineLateCount > 0
+            ? `+${health.maxBaselineSlipDays}d`
+            : t('table.onTime')
+          : '—',
+        sub: health.baselineTrackedCount
+          ? t('overview.baselineSummary', {
+              late: health.baselineLateCount,
+              onTime: health.baselineOnTimeCount,
+              ahead: health.baselineAheadCount
+            })
+          : t('overview.noBaseline'),
+        alert: health.baselineLateCount > 0
+      },
+      {
+        label: t('overview.durationRisks'),
+        value: String(health.durationRisks.length),
+        sub: health.durationRisks.length > 0 ? t('filter.durationRisk') : t('overview.noDurationRisks'),
+        alert: health.durationRisks.length > 0
+      }
+    ]
+    renderMetricStrip(section, stats)
+
+    if (health.durationRisks.length > 0) {
+      const list = section.createDiv('pm-overview-risk-list')
+      for (const { task, risk } of health.durationRisks.slice(0, 6)) {
+        const row = list.createDiv('pm-overview-risk-row')
+        row.createSpan({ cls: 'pm-overview-risk-title', text: task.title })
+        row.createSpan({
+          cls: 'pm-overview-risk-detail',
+          text: t('overview.durationRiskItem', {
+            available: risk.availableDays,
+            required: risk.requiredDays,
+            projectedDue: formatDateShort(risk.projectedDue)
+          })
+        })
+        row.addEventListener('click', () => {
+          openTaskModal(this.plugin, project, {
+            task,
+            onSave: async () => {
+              this.render()
+            }
+          })
+        })
+      }
+    }
   }
 
   private renderDescription(parent: HTMLElement, project: Project): void {

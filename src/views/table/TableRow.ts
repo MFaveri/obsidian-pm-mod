@@ -21,6 +21,7 @@ import {
   PriorityCell,
   ProjectCell,
   ProgressCell,
+  ScheduleMetricCell,
   SelectCell,
   StatusCell,
   TimeCell,
@@ -150,6 +151,16 @@ export function renderTaskRow(tbody: HTMLElement, flat: TableTreeRow, ctx: Table
         break
       case 'time':
         new TimeCell(row, { logged: totalLoggedHours(task), estimate: task.timeEstimate ?? 0 })
+        break
+      case 'duration':
+      case 'slack':
+      case 'baseline':
+        new ScheduleMetricCell(row, {
+          kind: column,
+          task,
+          scheduleOptions: ctx.scheduleOptionsOf(task.id),
+          criticalInfo: ctx.criticalPath.tasks[task.id]
+        })
         break
       default: {
         const cf = customFields.find((field) => `cf:${field.id}` === column)

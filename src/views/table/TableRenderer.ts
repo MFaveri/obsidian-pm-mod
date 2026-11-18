@@ -1,5 +1,7 @@
 import type PMPlugin from '#main'
 import {
+  type CriticalPathResult,
+  type ScheduleOptions,
   type TaskQuery,
   type SortKey,
   type SortRule,
@@ -69,6 +71,8 @@ export interface TableContext {
   /** The field ids the table shows, in order, and the view's fields their widths come from. */
   columns: string[]
   fields: ViewFields
+  criticalPath: CriticalPathResult
+  scheduleOptionsOf: (taskId: string) => ScheduleOptions
   state: TableState
   onRefresh: () => Promise<void>
   onSelectionChange: () => void
@@ -262,7 +266,11 @@ function fillTableBody(ctx: TableContext): void {
   const includeSuperseded = includesSupersededFilter(ctx.state.query.filter)
   let flat = flattenTasks(excludeSupersededTasks(ctx.scope.tasks(), includeSuperseded), ctx.collapsedIds)
   const hasActiveFilter = isQueryActive(ctx.state.query)
-  flat = applyTaskFilterFlat(flat, ctx.state.query, ctx.scope.filterContext(personKeyer(ctx.plugin.app)))
+  flat = applyTaskFilterFlat(
+    flat,
+    ctx.state.query,
+    ctx.scope.filterContext(personKeyer(ctx.plugin.app), ctx.plugin.settings.holidays)
+  )
 
   const filteredIds = new Set(flat.map((f) => f.task.id))
 
@@ -285,7 +293,12 @@ function fillTableBody(ctx: TableContext): void {
     list.push(f)
   }
   for (const list of childrenByParent.values()) {
-    list.sort((a, b) => compareTasks(a.task, b.task, ctx.state.sort, ctx.statuses, ctx.priorities))
+    list.sort((a, b) =>
+      compareTasks(a.task, b.task, ctx.state.sort, ctx.statuses, ctx.priorities, {
+        criticalPath: ctx.criticalPath,
+        scheduleOptionsOf: ctx.scheduleOptionsOf
+      })
+    )
   }
 
   const sorted: TableTreeRow[] = []

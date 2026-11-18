@@ -1,4 +1,5 @@
 import {
+  type CriticalPathResult,
   type CustomFieldDef,
   type FilterContext,
   type FilterState,
@@ -16,9 +17,12 @@ import {
   type Task,
   type FieldCatalog,
   type ViewFields,
+  computeDurationRisk,
+  computeScopeCriticalPath,
   displayName,
   flattenTasks,
-  mergeById
+  mergeById,
+  scheduleOptionsFor
 } from '@dotpm/core'
 import type { AvatarPerson } from '../primitives/AvatarStack'
 import type { FilterSetup } from '../composites/ViewHeader/filterPopover'
@@ -40,6 +44,8 @@ export interface ViewSettings {
   ganttWeekLabel: GanttWeekLabel
   ganttGranularity: GanttGranularity
   holidays: string[]
+  showCriticalPath?: boolean
+  showBaseline?: boolean
 }
 
 /**
@@ -107,10 +113,18 @@ export function queryOf(model: ViewModel): TaskQuery {
 }
 
 export function filterContextOf(model: ViewModel): FilterContext {
+  let cachedCpm: CriticalPathResult | null = null
+  const ensureCpm = (): CriticalPathResult => {
+    if (!cachedCpm) cachedCpm = computeScopeCriticalPath(model.projects, model.settings.holidays)
+    return cachedCpm
+  }
   return {
     statuses: mergedConfig(model).statuses,
     customFields: customFieldColumns(model),
-    projectOf: (task) => projectOf(model, task.id)?.id
+    projectOf: (task) => projectOf(model, task.id)?.id,
+    criticalInfoOf: (task) => ensureCpm().tasks[task.id],
+    durationRiskOf: (task) =>
+      computeDurationRisk(task, scheduleOptionsFor(configOf(model, task.id), model.settings.holidays)) !== null
   }
 }
 

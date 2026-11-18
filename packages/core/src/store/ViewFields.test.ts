@@ -33,7 +33,16 @@ describe('view fields', () => {
   it('keeps the title first and drops fields that no longer exist', () => {
     const fields: ViewFields = { table: { visible: ['due', 'cf:gone', 'title', 'status'] } }
     expect(shownFields(fields, 'table', one)).toEqual(['title', 'due', 'status'])
-    expect(hiddenFields(fields, 'table', one)).toEqual(['priority', 'assignees', 'progress', 'time', 'cf:client'])
+    expect(hiddenFields(fields, 'table', one)).toEqual([
+      'priority',
+      'assignees',
+      'progress',
+      'time',
+      'duration',
+      'slack',
+      'baseline',
+      'cf:client'
+    ])
   })
 
   it('keeps the title in a table even when every field is hidden', () => {
@@ -75,6 +84,20 @@ describe('view fields', () => {
   it('names custom fields by their name', () => {
     expect(viewFieldLabel('cf:client', [client])).toBe('Client')
     expect(viewFieldLabel('due', [])).toBe('Due')
+    expect(viewFieldLabel('duration', [])).toBe('Duration')
+    expect(viewFieldLabel('slack', [])).toBe('Slack')
+    expect(viewFieldLabel('baseline', [])).toBe('Baseline')
+  })
+
+  it('keeps schedule columns optional by default in table views', () => {
+    const avail = availableFields('table', one)
+    expect(avail).toContain('duration')
+    expect(avail).toContain('slack')
+    expect(avail).toContain('baseline')
+    const def = defaultFields('table', one)
+    expect(def).not.toContain('duration')
+    expect(def).not.toContain('slack')
+    expect(def).not.toContain('baseline')
   })
 })
 

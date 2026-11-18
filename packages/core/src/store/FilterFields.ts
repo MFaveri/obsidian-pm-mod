@@ -23,7 +23,10 @@ export const BUILTIN_FILTER_FIELDS = [
   'start',
   'type',
   'project',
-  'title'
+  'title',
+  'critical',
+  'slack',
+  'durationRisk'
 ] as const
 type BuiltinField = (typeof BUILTIN_FILTER_FIELDS)[number]
 
@@ -36,7 +39,10 @@ const BUILTIN_KINDS: Record<BuiltinField, FilterKind> = {
   start: 'date',
   type: 'list',
   project: 'list',
-  title: 'text'
+  title: 'text',
+  critical: 'checkbox',
+  slack: 'number',
+  durationRisk: 'checkbox'
 }
 
 const CUSTOM_KINDS: Record<CustomFieldDef['type'], FilterKind> = {
@@ -64,6 +70,10 @@ export interface FilterContext {
   keyOf?: (raw: string) => string
   /** The id of the project a task belongs to, for the project field. */
   projectOf?: (task: Task) => string | undefined
+  /** CPM criticality and slack info for a task when critical/slack filters are used. */
+  criticalInfoOf?: (task: Task) => { critical: boolean; slackDays: number } | undefined
+  /** Whether the task's scheduled window is shorter than its mandatory durationDays. */
+  durationRiskOf?: (task: Task) => boolean
 }
 
 function isBuiltin(field: string): field is BuiltinField {
@@ -105,6 +115,12 @@ export function filterFieldLabel(field: string, customFields: CustomFieldDef[]):
       return t('common.project')
     case 'title':
       return t('filter.title')
+    case 'critical':
+      return t('filter.critical')
+    case 'slack':
+      return t('filter.slack')
+    case 'durationRisk':
+      return t('filter.durationRisk')
     default:
       return field
   }
@@ -128,7 +144,10 @@ const BUILTIN_ICONS: Record<BuiltinField, string> = {
   start: 'calendar-arrow-up',
   type: 'shapes',
   project: 'folder-kanban',
-  title: 'type'
+  title: 'type',
+  critical: 'flame',
+  slack: 'hourglass',
+  durationRisk: 'alert-triangle'
 }
 
 export function filterFieldIcon(field: string, customFields: CustomFieldDef[]): string {
@@ -166,6 +185,12 @@ export function filterValue(
       return ctx.projectOf?.(task) ?? ''
     case 'title':
       return task.title
+    case 'critical':
+      return ctx.criticalInfoOf?.(task)?.critical ?? false
+    case 'slack':
+      return ctx.criticalInfoOf?.(task)?.slackDays ?? null
+    case 'durationRisk':
+      return ctx.durationRiskOf?.(task) ?? false
   }
   const custom = customFieldOf(field, ctx.customFields)
   if (!custom) return null

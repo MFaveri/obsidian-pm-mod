@@ -229,7 +229,9 @@ export class ProjectView extends ItemView {
       group: structuredClone(this.group),
       fields: structuredClone(this.fields),
       ganttGranularity: this.granularity,
-      nonWorkingDays: structuredClone(this.nonWorkingDays)
+      nonWorkingDays: structuredClone(this.nonWorkingDays),
+      showCriticalPath: this.showCriticalPath,
+      showBaseline: this.showBaseline
     }
   }
   getIcon(): string {
@@ -595,7 +597,7 @@ export class ProjectView extends ItemView {
       state.setTitle(t('filter.noSearchMatch', { text: this.query.text.trim() }))
       return
     }
-    const ctx = scope.filterContext(personKeyer(this.plugin.app))
+    const ctx = scope.filterContext(personKeyer(this.plugin.app), this.plugin.settings.holidays)
     const tasks = flattenTasks(scope.tasks()).map((flat) => flat.task)
     const best = bestConditionToDrop(tasks, this.query, ctx)
     const apply = (): void => {
@@ -633,7 +635,7 @@ export class ProjectView extends ItemView {
   private taskCounts(): { shown: number; total: number } {
     const scope = this.projectScope
     if (!scope) return { shown: 0, total: 0 }
-    const ctx = scope.filterContext(personKeyer(this.plugin.app))
+    const ctx = scope.filterContext(personKeyer(this.plugin.app), this.plugin.settings.holidays)
     const includeSuperseded = includesSupersededFilter(this.query.filter)
     const all = flattenTasks(excludeSupersededTasks(scope.tasks(), includeSuperseded))
     const total = all.filter(
@@ -1488,7 +1490,7 @@ export class ProjectView extends ItemView {
     return {
       filter: this.query.filter,
       tasks: flattenTasks(scope.tasks()).map((flat) => flat.task),
-      ctx: scope.filterContext(personKeyer(this.plugin.app)),
+      ctx: scope.filterContext(personKeyer(this.plugin.app), this.plugin.settings.holidays),
       priorities: config.priorities,
       priorityIcons: config.priorityIcons,
       projects: scope.isMulti

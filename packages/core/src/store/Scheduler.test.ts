@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_STATUSES, makeTask, type StatusConfig, type Task } from '../types'
+import { DEFAULT_PRIORITIES, DEFAULT_STATUSES, makeTask, type ResolvedProjectConfig, type StatusConfig, type Task } from '../types'
 import {
   addDays,
   computeBaselineVariance,
   computeCriticalPath,
   computeDurationRisk,
   computeSchedule,
+  computeScheduleHealth,
   daysBetween,
   expandDateRangeOverrides,
   wouldCreateCycle
@@ -776,5 +777,60 @@ describe('dependency types (FS/SS/FF) and lagDays', () => {
       ['b', 'c']
     ])
     expect(cpm.tasks['a']?.slackDays).toBe(0)
+  })
+})
+
+describe('computeScheduleHealth', () => {
+  it('aggregates critical tasks, baseline variances, and active duration risks', () => {
+    const config: ResolvedProjectConfig = {
+      statuses,
+      priorities: DEFAULT_PRIORITIES,
+      priorityIcons: 'chevrons',
+      customFields: [],
+      defaultView: 'table',
+      autoSchedule: false,
+      pullForwardOnEarlyFinish: false,
+      scheduleWorkdaysOnly: false,
+      workingWeekdays: [1, 2, 3, 4, 5],
+      extraWorkdays: [],
+      extraNonWorkdays: [],
+      autoArchiveDays: 0,
+      showSubtreeConnections: true,
+      lineBorders: 'none'
+    }
+    const a = task({
+      id: 'a',
+      start: '2026-05-04',
+      due: '2026-05-06',
+      baselineStart: '2026-05-04',
+      baselineDue: '2026-05-04', // +2d late
+      durationDays: 5 // active shortfall risk (3d / 5d)
+    })
+    const b = task({
+      id: 'b',
+      start: '2026-05-07',
+      due: '2026-05-08',
+      baselineStart: '2026-05-07',
+      baselineDue: '2026-05-08', // 0d on time
+      dependencies: ['a']
+    })
+    const done = task({
+      id: 'done',
+      status: 'done',
+      start: '2026-05-04',
+      due: '2026-05-04',
+      durationDays: 5, // ignored in active durationRisks since done
+      baselineStart: '2026-05-04',
+      baselineDue: '2026-05-06' // -2d ahead
+    })
+
+    const health = computeScheduleHealth([a, b, done], config)
+    expect(health.criticalTasks.map((t) => t.id)).toEqual(['a', 'b'])
+    expect(health.baselineTrackedCount).toBe(3)
+    expect(health.baselineLateCount).toBe(1)
+    expect(health.baselineOnTimeCount).toBe(1)
+    expect(health.baselineAheadCount).toBe(1)
+    expect(health.maxBaselineSlipDays).toBe(2)
+    expect(health.durationRisks.map((entry) => entry.task.id)).toEqual(['a'])
   })
 })

@@ -10,7 +10,6 @@ import {
   type TaskQuery,
   type ViewFields,
   buildGanttRows,
-  computeCriticalPath,
   flattenTasks,
   makeTask,
   shownFields,
@@ -178,23 +177,7 @@ export class GanttView implements SubView {
       ? this.plugin.store.configFor(this.scope.primary)
       : null
     const workingWeekdays = primaryCfg?.workingWeekdays
-    this.criticalPath = computeCriticalPath(
-      this.scope.projects.flatMap((p) => p.tasks),
-      this.scope.config.statuses,
-      this.externalPredecessors(),
-      {
-        workdaysOnly: primaryCfg
-          ? primaryCfg.scheduleWorkdaysOnly
-          : this.scope.projects.some((p) => this.plugin.store.configFor(p).scheduleWorkdaysOnly),
-        workingWeekdays: workingWeekdays ?? this.plugin.settings.workingWeekdays,
-        holidays: this.plugin.settings.holidays,
-        extraWorkdays,
-        extraNonWorkdays,
-        pullForward: primaryCfg
-          ? primaryCfg.pullForwardOnEarlyFinish
-          : this.scope.projects.some((p) => this.plugin.store.configFor(p).pullForwardOnEarlyFinish)
-      }
-    )
+    this.criticalPath = this.scope.criticalPath(this.plugin.settings.holidays, this.externalPredecessors())
     this.cfg = buildTimelineConfig(timelineTasks, this.granularity, {
       zoom: this.zoom,
       isHidden: nonWorkingDay(this.nonWorkingDays, this.plugin.settings.holidays, {

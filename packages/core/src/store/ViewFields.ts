@@ -8,13 +8,13 @@ import { t } from '../i18n'
  * `subtasks` puts each subtask on a card of its own.
  */
 const BUILT_IN: Record<ViewMode, string[]> = {
-  table: ['title', 'project', 'status', 'priority', 'assignees', 'due', 'progress', 'time'],
+  table: ['title', 'project', 'status', 'priority', 'assignees', 'due', 'progress', 'time', 'duration', 'slack', 'baseline'],
   kanban: ['priority', 'description', 'time', 'tags', 'progress', 'project', 'assignees', 'due', 'subtasks'],
   gantt: ['title', 'assignees', 'progress', 'dates', 'status', 'priority']
 }
 
 const HIDDEN_BY_DEFAULT: Record<ViewMode, ReadonlySet<string>> = {
-  table: new Set(),
+  table: new Set(['duration', 'slack', 'baseline']),
   kanban: new Set(['description', 'subtasks']),
   gantt: new Set(['assignees', 'progress', 'dates', 'status', 'priority'])
 }
@@ -29,7 +29,10 @@ export const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
   assignees: 140,
   due: 110,
   progress: 120,
-  time: 90
+  time: 90,
+  duration: 105,
+  slack: 110,
+  baseline: 115
 }
 export const CUSTOM_COLUMN_WIDTH = 120
 
@@ -135,6 +138,12 @@ export function viewFieldLabel(id: string, customFields: CustomFieldDef[]): stri
       return t('columns.progress')
     case 'time':
       return t('columns.time')
+    case 'duration':
+      return t('columns.duration')
+    case 'slack':
+      return t('columns.slack')
+    case 'baseline':
+      return t('columns.baseline')
     case 'tags':
       return t('taskForm.tags')
     case 'description':
