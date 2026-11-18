@@ -32,6 +32,15 @@ If you are looking for the official, community-maintained release in the Obsidia
   - **Portfolio KPIs:** overall completion, overdue & critical task counts, duration/baseline schedule risks, and cross-project assignee overload alerts.
   - **Immediate Focus & Next Actions Queue:** automatically ranks the top actionable, unblocked tasks across all active projects (overdue, critical path, duration risk, near due) with one-click status updates and modal editing.
   - **Upcoming Portfolio Milestones & Project Cards:** side-by-side project cards with health traffic lights (*On track*, *Attention*, *At risk*), next milestone, projected finish date, and the next 3 actionable steps per project.
+- **Project Analytics & Charts Dashboard (`ProjectChartsView`)**
+  - Dedicated interactive **Charts** view per project, accessible directly via the **"Open charts"** button on Cockpit project cards, the Project Overview header, and tab navigation menus.
+  - **Weekly Workload Histogram:** dynamic SVG histogram plotting active tasks overlapping each week with current-week highlighting, overload alerts (`⚡`), completed markers, and toggle between *By status* (on track vs. risk) and *By assignee* (stacked color bars), complete with click drill-down.
+  - **Assignee Workload & Capacity Bars:** horizontal stacked distribution bars (*Overdue / Active / Done*) per team member with daily concurrent peak badges (`Max N/day`) and interactive task inspection.
+  - **Scope & Delivery Burn-up Curve:** cumulative tracking of total scope created, planned due dates, baseline planned schedule, and actual completed tasks with pace diagnosis (*Ahead / Behind by N tasks*).
+  - **Schedule Fragility & Slack Profile (CPM):** interactive proportional bar and category breakdown (*Overdue*, *Critical 0d*, *Tight 1–3d*, *Margin >3d*, *Unscheduled*) with clickable task lists.
+  - **Baseline Variance Diverging Chart:** visual delta bars (`-Xd` ahead vs. `+Xd` slipped) per tracked task against captured baseline.
+  - **Effort Tracking (Estimated vs. Logged):** comparative progress bars per team member with over-budget alerts.
+  - **Time Window Toggle:** instant switch between **12 weeks** rolling window and **Full span**.
 - **Multi-Project Gantt & Summary Bars**
   - Group tasks across multiple projects under collapsible project summary bars (`min start .. max due` and aggregated progress).
   - Filter timelines by assignee across projects.
@@ -71,6 +80,7 @@ The table below summarizes the technical extensions introduced in **PM Workbench
 | Capability | dotpm (v2.6.0) | PM Workbench |
 | :--- | :---: | :---: |
 | **Projects Dashboard** | Table list with search & grouping | **Executive Portfolio Cockpit** (portfolio KPIs, unblocked focus queue, upcoming milestones, project health cards) + instant toggle to classic Table |
+| **Project Analytics & Charts** | — | **Dedicated Project Charts dashboard** with weekly workload histogram (by status/assignee), assignee capacity bars, scope burn-up curve, CPM slack profile, baseline divergence, and effort tracking |
 | **Critical Path Method (CPM)** | — | **Automated CPM engine** calculating critical path, earliest/latest dates, and working-day Total Slack with Gantt highlighting |
 | **Schedule Baseline Tracking** | — | **Baseline snapshot capture** (`baselineStart` / `baselineDue`), Gantt ghost bars, and schedule variance tracking |
 | **Mandatory Duration & Risk** | Date window only | **Explicit duration (`durationDays`)** with execution shortfall detection, visual warning badges, and 1-click deadline adjustment |

@@ -40,6 +40,7 @@ import { around } from 'monkey-around'
 import { installObsidianPlatform } from './platform'
 import { PMSettingTab } from './settings'
 import { ProjectView, PM_PROJECT_VIEW_TYPE } from './views/ProjectView'
+import { ProjectChartsView, PM_PROJECT_CHARTS_VIEW_TYPE } from './views/ProjectChartsView'
 import { ProjectOverviewView, PM_PROJECT_OVERVIEW_VIEW_TYPE } from './views/ProjectOverviewView'
 import { ProjectEditView, PM_PROJECT_EDIT_VIEW_TYPE } from './views/ProjectEditView'
 import { DashboardView, PM_DASHBOARD_VIEW_TYPE } from './views/DashboardView'
@@ -130,6 +131,7 @@ export default class PMPlugin extends Plugin {
 
     this.registerView(PM_PROJECT_VIEW_TYPE, (leaf) => new ProjectView(leaf, this))
     this.registerView(PM_PROJECT_OVERVIEW_VIEW_TYPE, (leaf) => new ProjectOverviewView(leaf, this))
+    this.registerView(PM_PROJECT_CHARTS_VIEW_TYPE, (leaf) => new ProjectChartsView(leaf, this))
     this.registerView(PM_PROJECT_EDIT_VIEW_TYPE, (leaf) => new ProjectEditView(leaf, this))
     this.registerView(PM_DASHBOARD_VIEW_TYPE, (leaf) => new DashboardView(leaf, this))
     this.registerView(PM_TASK_VIEW_TYPE, (leaf) => new TaskView(leaf, this))

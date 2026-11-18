@@ -90,7 +90,7 @@ export class ProjectOverviewView extends ItemView {
     super.onPaneMenu(menu, source)
     const project = this.project
     if (!project) return
-    addTabPageItems(menu, this.plugin, this.leaf, project.filePath, ['tasks', 'edit', 'note'])
+    addTabPageItems(menu, this.plugin, this.leaf, project.filePath, ['charts', 'tasks', 'edit', 'note'])
   }
 
   async setState(state: ProjectOverviewState, result: unknown): Promise<void> {
@@ -232,6 +232,9 @@ export class ProjectOverviewView extends ItemView {
     new ButtonComponent(header)
       .setButtonText(t('project.openAsNote'))
       .onClick(safeAsync(() => this.plugin.openAsMarkdown(project.filePath, this.leaf)))
+    new ButtonComponent(header)
+      .setButtonText(t('project.openCharts'))
+      .onClick(safeAsync(() => this.plugin.router.openProjectCharts(project.filePath, this.leaf)))
     new ButtonComponent(header)
       .setButtonText(t('project.openTasks'))
       .setCta()

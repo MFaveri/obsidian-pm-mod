@@ -4,7 +4,7 @@ import { t } from '@dotpm/core'
 import { safeAsync } from '@dotpm/ui'
 
 /** A page of one note that a tab's "More options" menu can open in the same tab. */
-export type TabPage = 'overview' | 'tasks' | 'edit' | 'note'
+export type TabPage = 'overview' | 'charts' | 'tasks' | 'edit' | 'note'
 
 /** Adds the pages to the menu in the order given, each opening `path` in `leaf`. */
 export function addTabPageItems(
@@ -19,6 +19,11 @@ export function addTabPageItems(
       title: t('project.openOverview'),
       icon: 'gauge',
       open: () => plugin.router.openProjectOverview(path, leaf)
+    },
+    charts: {
+      title: t('project.openCharts'),
+      icon: 'bar-chart-2',
+      open: () => plugin.router.openProjectCharts(path, leaf)
     },
     tasks: {
       title: t('project.openTasks'),

@@ -73,7 +73,7 @@ export class ProjectEditView extends ItemView {
     super.onPaneMenu(menu, source)
     const project = this.project
     if (!project) return
-    addTabPageItems(menu, this.plugin, this.leaf, project.filePath, ['overview', 'tasks', 'note'])
+    addTabPageItems(menu, this.plugin, this.leaf, project.filePath, ['overview', 'charts', 'tasks', 'note'])
   }
 
   async setState(state: ProjectEditState, result: unknown): Promise<void> {

@@ -28,6 +28,7 @@ export interface ScopeWorkloadOptions {
 export interface ScopeWorkloadResult {
   assignees: AssigneeWorkload[]
   overloadedTaskIds: ReadonlySet<string>
+  overloadedDates: ReadonlySet<string>
   totalOverloadedAssignees: number
 }
 
@@ -78,6 +79,7 @@ export function computeScopeWorkload(
   }
 
   const overloadedTaskIds = new Set<string>()
+  const overloadedDates = new Set<string>()
   const assignees: AssigneeWorkload[] = []
   let totalOverloadedAssignees = 0
 
@@ -111,11 +113,12 @@ export function computeScopeWorkload(
     let maxConcurrentTasks = 0
     const conflictMap = new Map<string, { task1Id: string; task2Id: string; count: number }>()
 
-    for (const taskSet of tasksPerDay.values()) {
+    for (const [iso, taskSet] of tasksPerDay.entries()) {
       const count = taskSet.size
       if (count > maxConcurrentTasks) maxConcurrentTasks = count
       if (count >= 2) {
         overloadDaysCount++
+        overloadedDates.add(iso)
         const ids = Array.from(taskSet)
         for (const id of ids) overloadedTaskIds.add(id)
         for (let i = 0; i < ids.length; i++) {
@@ -165,6 +168,7 @@ export function computeScopeWorkload(
   return {
     assignees,
     overloadedTaskIds,
+    overloadedDates,
     totalOverloadedAssignees
   }
 }

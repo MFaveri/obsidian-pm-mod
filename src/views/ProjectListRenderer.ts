@@ -140,6 +140,12 @@ function openProjectContextMenu(ctx: ProjectListContext, ref: ProjectRef, e: Mou
   )
   menu.addItem((item) =>
     item
+      .setTitle(t('project.openCharts'))
+      .setIcon('bar-chart-2')
+      .onClick(safeAsync(() => ctx.plugin.router.openProjectCharts(ref.path)))
+  )
+  menu.addItem((item) =>
+    item
       .setTitle(t('project.openTasks'))
       .setIcon('table')
       .onClick(safeAsync(() => ctx.plugin.router.openScope({ kind: 'project', path: ref.path })))

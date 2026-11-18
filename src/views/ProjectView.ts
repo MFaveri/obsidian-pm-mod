@@ -245,7 +245,9 @@ export class ProjectView extends ItemView {
     const scope = this.projectScope
     const primary = scope?.primary
     if (!scope || !primary) return
-    if (!scope.isMulti) addTabPageItems(menu, this.plugin, this.leaf, primary.filePath, ['note', 'edit'])
+    if (!scope.isMulti) {
+      addTabPageItems(menu, this.plugin, this.leaf, primary.filePath, ['overview', 'charts', 'note', 'edit'])
+    }
     menu.addItem((item) =>
       item
         .setSection('action')

@@ -2,6 +2,7 @@ import { TFile, type ViewState, type WorkspaceLeaf } from 'obsidian'
 import type PMPlugin from '#main'
 import type { ScopeSpec } from '#store'
 import { PM_DASHBOARD_VIEW_TYPE } from './DashboardView'
+import { PM_PROJECT_CHARTS_VIEW_TYPE } from './ProjectChartsView'
 import { PM_PROJECT_EDIT_VIEW_TYPE } from './ProjectEditView'
 import { PM_PROJECT_OVERVIEW_VIEW_TYPE } from './ProjectOverviewView'
 import { PM_PROJECT_VIEW_TYPE } from './ProjectView'
@@ -33,6 +34,10 @@ export class PMViewRouter {
 
   async openProjectOverview(path: string, leaf?: WorkspaceLeaf): Promise<void> {
     await this.open(PM_PROJECT_OVERVIEW_VIEW_TYPE, { filePath: path }, leaf)
+  }
+
+  async openProjectCharts(path: string, leaf?: WorkspaceLeaf): Promise<void> {
+    await this.open(PM_PROJECT_CHARTS_VIEW_TYPE, { filePath: path }, leaf)
   }
 
   /** Where a project link lands, per the open projects in setting. */

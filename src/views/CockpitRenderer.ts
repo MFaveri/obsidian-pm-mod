@@ -414,6 +414,15 @@ function renderProjectCard(
       })
     )
   new IconButton(actions)
+    .setIcon('bar-chart-2')
+    .setTooltip(t('project.openCharts'))
+    .onClick(
+      safeAsync((e) => {
+        e.stopPropagation()
+        return ctx.plugin.router.openProjectCharts(project.filePath)
+      })
+    )
+  new IconButton(actions)
     .setIcon('chart-gantt')
     .setTooltip(t('project.openTasks'))
     .onClick(
