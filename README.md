@@ -27,6 +27,11 @@ If you are looking for the official, community-maintained release in the Obsidia
 
 ## Features Added on Top of `dotpm`
 
+- **Executive Portfolio Cockpit (Multi-Project Dashboard)**
+  - Default interactive **Executive Cockpit** mode in the Projects Dashboard (alongside the classic Table list).
+  - **Portfolio KPIs:** overall completion, overdue & critical task counts, duration/baseline schedule risks, and cross-project assignee overload alerts.
+  - **Immediate Focus & Next Actions Queue:** automatically ranks the top actionable, unblocked tasks across all active projects (overdue, critical path, duration risk, near due) with one-click status updates and modal editing.
+  - **Upcoming Portfolio Milestones & Project Cards:** side-by-side project cards with health traffic lights (*On track*, *Attention*, *At risk*), next milestone, projected finish date, and the next 3 actionable steps per project.
 - **Multi-Project Gantt & Summary Bars**
   - Group tasks across multiple projects under collapsible project summary bars (`min start .. max due` and aggregated progress).
   - Filter timelines by assignee across projects.
@@ -56,6 +61,26 @@ If you are looking for the official, community-maintained release in the Obsidia
   - **Table View:** Optional sortable columns for **Duration**, **Slack**, and **Baseline**, plus native filters for **Critical path**, **Slack (days)**, and **Duration risk**.
   - **Project Overview:** **Schedule health** card (critical tasks count, baseline variance summary, clickable duration risk alerts) and **Team workload** panel.
   - **Static HTML Snapshots:** Exported standalone HTML snapshots and the static viewer preserve CPM highlighting, baseline ghost bars, duration risks, parent rollups, and schedule table columns.
+
+---
+
+## Differences at a Glance (dotpm vs PM Workbench)
+
+The table below summarizes the technical extensions introduced in **PM Workbench**:
+
+| Capability | dotpm (v2.6.0) | PM Workbench |
+| :--- | :---: | :---: |
+| **Projects Dashboard** | Table list with search & grouping | **Executive Portfolio Cockpit** (portfolio KPIs, unblocked focus queue, upcoming milestones, project health cards) + instant toggle to classic Table |
+| **Critical Path Method (CPM)** | — | **Automated CPM engine** calculating critical path, earliest/latest dates, and working-day Total Slack with Gantt highlighting |
+| **Schedule Baseline Tracking** | — | **Baseline snapshot capture** (`baselineStart` / `baselineDue`), Gantt ghost bars, and schedule variance tracking |
+| **Mandatory Duration & Risk** | Date window only | **Explicit duration (`durationDays`)** with execution shortfall detection, visual warning badges, and 1-click deadline adjustment |
+| **Advanced Dependencies** | Finish-to-Start (`FS`) only | **`FS`, `SS`, `FF` dependencies** with customizable Lag/Lead offset (`±days`) and inline Gantt routing |
+| **Parent Task Rollup in Gantt** | Subtasks rendered independently | **Hierarchical summary rollup** (date range, baselines, progress) with expanded brackets and collapsed summary bars |
+| **Team Workload & Overload** | — | **Assignee workload analysis** detecting concurrent overlapping tasks across working days with conflict links |
+| **Working Calendar & Time-Off** | Default calendar | **Per-project calendar overrides**: customizable working weekdays, holidays, extra workdays, and time-off date ranges |
+| **Schedule Health in Overview** | Basic status counts | **Dedicated Schedule Health & Team Workload panels** with clickable risk alerts and overload diagnosis |
+| **Table View Scheduling Columns** | Standard task fields | **Duration, Slack, and Baseline columns** with dedicated CPM, Slack, and Duration Risk filters |
+| **Standalone HTML Snapshots** | Standard snapshot export | **Full schedule metadata export**, preserving CPM styling, baseline ghost bars, duration risks, and rollup summaries |
 
 ---
 

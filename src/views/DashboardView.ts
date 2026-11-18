@@ -4,6 +4,7 @@ import {
   type ProjectGroupBy,
   type ProjectListField,
   type ProjectListItem,
+  type ProjectListMode,
   type ProjectListView,
   type ProjectProgress,
   type ProjectSortKey,
@@ -53,9 +54,18 @@ import {
   syncSortButton
 } from '@dotpm/ui'
 import { openProjectCreate } from '#ui/ModalFactory'
+import { renderPortfolioCockpit } from './CockpitRenderer'
 import { projectListItems, renderProjectTable, type ProjectListContext } from './ProjectListRenderer'
 
 export const PM_DASHBOARD_VIEW_TYPE = 'pm-dashboard'
+
+const DASHBOARD_MODES: ProjectListMode[] = ['cockpit', 'table']
+const DASHBOARD_MODE_ICONS: Record<ProjectListMode, string> = {
+  cockpit: 'layout-dashboard',
+  table: 'table'
+}
+const dashboardModeLabel = (mode: ProjectListMode): string =>
+  mode === 'cockpit' ? t('dashboard.modeCockpit') : t('dashboard.modeTable')
 
 const sortFields = (): SortField<ProjectSortKey>[] => [
   { id: 'title', label: t('columns.project') },
@@ -84,6 +94,7 @@ export class DashboardView extends ItemView {
   private fieldsButton: ChipButton | null = null
   private items: ProjectListItem[] = []
   private shown = 0
+  private renderSeq = 0
 
   constructor(leaf: WorkspaceLeaf, plugin: PMPlugin) {
     super(leaf)
@@ -109,6 +120,31 @@ export class DashboardView extends ItemView {
 
   private get state() {
     return this.plugin.settings.projectList
+  }
+
+  private get mode(): ProjectListMode {
+    return this.state.mode ?? 'cockpit'
+  }
+
+  private setMode(mode: ProjectListMode): void {
+    if (mode === 'cockpit') delete this.state.mode
+    else this.state.mode = mode
+    this.renderHeader()
+    this.changed()
+  }
+
+  private showModeMenu(anchor: HTMLElement): void {
+    const menu = new Menu()
+    for (const mode of DASHBOARD_MODES) {
+      menu.addItem((item) =>
+        item
+          .setTitle(dashboardModeLabel(mode))
+          .setIcon(DASHBOARD_MODE_ICONS[mode])
+          .setChecked(this.mode === mode)
+          .onClick(() => this.setMode(mode))
+      )
+    }
+    showMenuBelow(menu, anchor)
   }
 
   onOpen(): Promise<void> {
@@ -161,10 +197,17 @@ export class DashboardView extends ItemView {
       icon: 'library',
       ancestors: [],
       title: t('dashboard.title'),
-      foldLabel: t('header.parentProjects')
+      foldLabel: t('header.parentProjects'),
+      mode: {
+        icon: DASHBOARD_MODE_ICONS[this.mode],
+        label: dashboardModeLabel(this.mode),
+        tooltip: t('header.viewMode', { mode: dashboardModeLabel(this.mode) }),
+        onOpen: (anchor: HTMLElement) => this.showModeMenu(anchor)
+      }
     })
     this.renderViewSlot(header.view)
     this.renderQuerySlot(header.query)
+    this.renderOptionsSlot(header.options)
     header
       .setTuneItems(() => this.tuneItems())
       .setTuneSheet(() => this.tuneSheet())
@@ -194,9 +237,22 @@ export class DashboardView extends ItemView {
     const group = new ChipButton(parent).setIcon('group').setAriaLabel(t('header.groupBy'))
     group.onClick(() => this.openGroupMenu(group.el))
     this.groupButton = group
-    const fields = new ChipButton(parent).setIcon('columns-3').setLabel(t('header.fields'))
-    fields.setAriaLabel(t('header.fields')).onClick(() => this.openFields(fields.el))
-    this.fieldsButton = fields
+    if (this.mode === 'table') {
+      const fields = new ChipButton(parent).setIcon('columns-3').setLabel(t('header.fields'))
+      fields.setAriaLabel(t('header.fields')).onClick(() => this.openFields(fields.el))
+      this.fieldsButton = fields
+    } else {
+      this.fieldsButton = null
+    }
+  }
+
+  private renderOptionsSlot(parent: HTMLElement): void {
+    const nextMode: ProjectListMode = this.mode === 'cockpit' ? 'table' : 'cockpit'
+    new ChipButton(parent)
+      .setIcon(DASHBOARD_MODE_ICONS[nextMode])
+      .setLabel(dashboardModeLabel(nextMode))
+      .setAriaLabel(dashboardModeLabel(nextMode))
+      .onClick(() => this.setMode(nextMode))
   }
 
   private shownFields(): ProjectListField[] {
@@ -408,14 +464,23 @@ export class DashboardView extends ItemView {
         label: t('header.groupBy'),
         state: groupLabel(this.state.group),
         onOpen: (anchor) => this.openGroupMenu(anchor)
-      },
-      {
+      }
+    )
+    if (this.mode === 'table') {
+      items.push({
         icon: 'columns-3',
         label: t('header.fields'),
         state: this.hiddenFieldsLabel(),
         onOpen: (anchor) => this.openFields(anchor)
-      }
-    )
+      })
+    }
+    const nextMode: ProjectListMode = this.mode === 'cockpit' ? 'table' : 'cockpit'
+    items.push({
+      icon: DASHBOARD_MODE_ICONS[nextMode],
+      label: dashboardModeLabel(nextMode),
+      state: dashboardModeLabel(this.mode),
+      onOpen: () => this.setMode(nextMode)
+    })
     return [items]
   }
 
@@ -427,6 +492,7 @@ export class DashboardView extends ItemView {
 
   private renderList(): void {
     const { plugin } = this
+    const seq = ++this.renderSeq
     this.items = projectListItems(plugin)
     const { groups, shown, total } = arrangeProjects(this.items, this.state, this.text, (path) =>
       plugin.isProjectCollapsed(path)
@@ -451,6 +517,23 @@ export class DashboardView extends ItemView {
         })
       return
     }
+
+    if (this.mode === 'cockpit') {
+      void renderPortfolioCockpit(
+        {
+          plugin,
+          contentEl: this.bodyEl,
+          groups,
+          groupBy: this.state.group,
+          collapsedGroups: this.collapsedGroups,
+          openProject: (path) => plugin.router.openProjectLink(path),
+          redraw: () => this.renderList()
+        },
+        () => seq !== this.renderSeq || !this.bodyEl.isConnected
+      )
+      return
+    }
+
     const ctx: ProjectListContext = {
       plugin,
       contentEl: this.bodyEl,
@@ -522,6 +605,7 @@ export class DashboardView extends ItemView {
     if (!sameValue(active.sort, this.state.sort)) changes.push(t('header.changedSort'))
     if (active.group !== this.state.group) changes.push(t('header.changedGroup'))
     if (active.fields && !sameValue(active.fields, this.shownFields())) changes.push(t('header.changedFields'))
+    if ((active.mode ?? 'cockpit') !== this.mode) changes.push(dashboardModeLabel(this.mode))
     if (active.showArchived !== this.plugin.settings.showArchivedProjects) changes.push(t('header.changedArchived'))
     return changes
   }
@@ -531,6 +615,8 @@ export class DashboardView extends ItemView {
     this.state.sort = structuredClone(view.sort)
     this.state.group = view.group
     if (view.fields) this.setFields(view.fields)
+    if (view.mode && view.mode !== 'cockpit') this.state.mode = view.mode
+    else delete this.state.mode
     this.state.activeViewId = view.id
     this.plugin.settings.showArchivedProjects = view.showArchived
   }
@@ -543,6 +629,7 @@ export class DashboardView extends ItemView {
       sort: structuredClone(this.state.sort),
       group: this.state.group,
       fields: this.shownFields(),
+      mode: this.mode,
       showArchived: this.plugin.settings.showArchivedProjects
     }
   }

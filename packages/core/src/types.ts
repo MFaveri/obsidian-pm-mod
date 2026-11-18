@@ -235,6 +235,8 @@ export type ProjectGroupBy = 'none' | 'folder' | 'tag'
 export const PROJECT_LIST_FIELDS = ['progress', 'tasks', 'members', 'due'] as const
 export type ProjectListField = (typeof PROJECT_LIST_FIELDS)[number]
 
+export type ProjectListMode = 'cockpit' | 'table'
+
 /** What the project list shows. Archived projects follow `PMSettings.showArchivedProjects`. */
 export interface ProjectListState {
   filter: ProjectListFilter
@@ -243,6 +245,8 @@ export interface ProjectListState {
   group: ProjectGroupBy
   /** The columns shown after the title, in order. Left out while every column shows in the default order. */
   fields?: ProjectListField[]
+  /** Defaults to `'cockpit'` when absent. */
+  mode?: ProjectListMode
   activeViewId: string | null
 }
 
@@ -254,6 +258,7 @@ export interface ProjectListView {
   group: ProjectGroupBy
   /** Left out by a view saved before columns could be chosen, which then keeps whatever shows. */
   fields?: ProjectListField[]
+  mode?: ProjectListMode
   showArchived: boolean
   isDefault?: boolean
 }
