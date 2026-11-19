@@ -25,7 +25,7 @@ import { openFilterPopover, renderFilterPanel, type FilterSetup } from './filter
 import { openGroupPopover } from './groupPopover'
 import { openNonWorkingDaysPopover } from './nonWorkingDaysPopover'
 import { openProjectFieldsPopover } from './projectFieldsPopover'
-import { openProjectFilterPopover, renderProjectFilterPanel } from './projectFilterPopover'
+import { openProjectFilterPopover, openProjectSelectPopover, renderProjectFilterPanel } from './projectFilterPopover'
 import { openProjectSwitcher, type ProjectSwitcherProps, type SwitcherProject } from './projectSwitcher'
 import { openSavedViewsPopover, type SavedViewsProps } from './savedViewsPopover'
 import type { BoardColumn } from '../../views/boardColumns'
@@ -680,6 +680,38 @@ describe('project filter popover', () => {
       showClear: false
     })
     expect(document.body.find('.pm-project-filter .pm-pop-head-action')).toBeNull()
+  })
+
+  it('selects specific projects in the project selector and resets to all projects', () => {
+    const filter: ProjectListFilter = {}
+    const onChange = vi.fn<() => void>()
+    openProjectSelectPopover(document.body.createEl('button'), {
+      filter,
+      projects: [
+        { path: 'Alpha.md', title: 'Alpha', note: '1/3' },
+        { path: 'Beta.md', title: 'Beta', note: '2/2' },
+        { path: 'Gamma.md', title: 'Gamma' }
+      ],
+      onChange
+    })
+    const rows = (): HTMLElement[] => document.body.findAll('.pm-project-select .pm-pop-item')
+    const isChecked = (row: HTMLElement): boolean => !row.find('.pm-pop-check')?.classList.contains('pm-pop-check--hidden')
+    // First row is "All projects" (checked by default), followed by the 3 projects
+    expect(rows()).toHaveLength(4)
+    expect(isChecked(rows()[0])).toBe(true)
+    expect(document.body.querySelector('.pm-project-select .pm-pop-head-action')).toBeNull()
+
+    rows()[1].click()
+    rows()[3].click()
+    expect(filter).toEqual({ projects: ['Alpha.md', 'Gamma.md'] })
+    expect(isChecked(rows()[0])).toBe(false)
+    expect(document.body.querySelector('.pm-project-select .pm-pop-head-action')).not.toBeNull()
+
+    rows()[0].click()
+    expect(filter).toEqual({})
+    expect(isChecked(rows()[0])).toBe(true)
+    expect(document.body.querySelector('.pm-project-select .pm-pop-head-action')).toBeNull()
+    expect(onChange).toHaveBeenCalledTimes(3)
   })
 })
 

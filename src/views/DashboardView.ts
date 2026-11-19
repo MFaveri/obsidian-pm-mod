@@ -28,6 +28,7 @@ import {
   EmptyState,
   openProjectFieldsPopover,
   openProjectFilterPopover,
+  openProjectSelectPopover,
   openSavedViewsPopover,
   openSearchPopover,
   openSortPopover,
@@ -43,7 +44,9 @@ import {
   ViewHeader,
   type PlatformMenu,
   type ProjectFieldsProps,
+  type ProjectFilterOption,
   type ProjectFilterProps,
+  type ProjectSelectProps,
   type SearchBoxProps,
   type SortPopoverProps,
   type TuneSheetProps,
@@ -87,6 +90,7 @@ export class DashboardView extends ItemView {
   private text = ''
   private collapsedGroups = new Set<string>()
   private viewSlot: SavedViewSlot | null = null
+  private projectsButton: ChipButton | null = null
   private filterButton: ChipButton | null = null
   private archivedButton: ChipButton | null = null
   private sortButton: ChipButton | null = null
@@ -227,6 +231,9 @@ export class DashboardView extends ItemView {
 
   private renderQuerySlot(parent: HTMLElement): void {
     this.searchBox = new SearchBox(parent, this.searchProps())
+    const projects = new ChipButton(parent).setIcon('folder-kanban').setLabel(t('header.projects'))
+    projects.setAriaLabel(t('header.projects')).onClick(() => this.openProjects(projects.el))
+    this.projectsButton = projects
     const filter = new ChipButton(parent).setIcon('list-filter').setLabel(t('header.filter'))
     filter.setAriaLabel(t('header.filter')).onClick(() => this.openFilter(filter.el))
     this.filterButton = filter
@@ -293,6 +300,31 @@ export class DashboardView extends ItemView {
     }
   }
 
+  private projectOptions(): ProjectFilterOption[] {
+    return allProjectItems(this.items)
+      .map((item) => ({
+        path: item.path,
+        title: item.title,
+        note: item.total ? `${item.done}/${item.total}` : undefined
+      }))
+      .sort((a, b) => a.title.localeCompare(b.title))
+  }
+
+  private openProjects(anchor: HTMLElement): void {
+    openProjectSelectPopover(anchor, this.projectSelectProps())
+  }
+
+  private projectSelectProps(after?: () => void): ProjectSelectProps {
+    return {
+      filter: this.state.filter,
+      projects: this.projectOptions(),
+      onChange: () => {
+        this.changed()
+        after?.()
+      }
+    }
+  }
+
   private openFilter(anchor: HTMLElement): void {
     openProjectFilterPopover(anchor, this.filterProps())
   }
@@ -305,6 +337,7 @@ export class DashboardView extends ItemView {
       filter: this.state.filter,
       progress,
       tags: projectTagCounts(this.items),
+      projects: this.projectOptions(),
       onChange: () => {
         this.changed()
         after?.()
@@ -428,6 +461,7 @@ export class DashboardView extends ItemView {
   /** The query controls as the Tune button lists them in a narrow header. */
   private tuneItems(): TuneItem[][] {
     const { settings, index } = this.plugin
+    const selectedProjects = this.state.filter.projects?.length ?? 0
     const filters = countProjectFilters(this.state.filter)
     const sort = summarizeSort(sortFields(), this.state.sort)
     const items: TuneItem[] = [
@@ -436,6 +470,12 @@ export class DashboardView extends ItemView {
         label: t('header.search'),
         state: this.text.trim(),
         onOpen: (anchor) => openSearchPopover(anchor, this.searchProps())
+      },
+      {
+        icon: 'folder-kanban',
+        label: t('header.projects'),
+        state: selectedProjects ? String(selectedProjects) : '',
+        onOpen: (anchor) => this.openProjects(anchor)
       },
       {
         icon: 'list-filter',
@@ -572,6 +612,8 @@ export class DashboardView extends ItemView {
         ? t('header.shownOf', { shown, total })
         : tn('count.projects', total)
     })
+    const selectedProjects = this.state.filter.projects?.length ?? 0
+    this.projectsButton?.setBadge(selectedProjects).setActive(selectedProjects > 0)
     const filters = countProjectFilters(this.state.filter)
     this.filterButton?.setBadge(filters).setActive(filters > 0)
     this.searchBox?.setValue(this.text)

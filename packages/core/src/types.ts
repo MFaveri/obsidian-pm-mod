@@ -227,6 +227,7 @@ export type ProjectProgress = (typeof PROJECT_PROGRESS)[number]
 export interface ProjectListFilter {
   tags?: string[]
   progress?: ProjectProgress[]
+  projects?: string[]
 }
 
 export type ProjectGroupBy = 'none' | 'folder' | 'tag'

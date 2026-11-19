@@ -53,7 +53,7 @@ export function projectProgress(item: ProjectListItem): ProjectProgress {
 }
 
 export function countProjectFilters(filter: ProjectListFilter): number {
-  return (filter.tags?.length ? 1 : 0) + (filter.progress?.length ? 1 : 0)
+  return (filter.projects?.length ? 1 : 0) + (filter.tags?.length ? 1 : 0) + (filter.progress?.length ? 1 : 0)
 }
 
 export function isProjectQueryActive(filter: ProjectListFilter, text: string): boolean {
@@ -63,6 +63,7 @@ export function isProjectQueryActive(filter: ProjectListFilter, text: string): b
 function matches(item: ProjectListItem, filter: ProjectListFilter, text: string): boolean {
   const needle = text.trim().toLowerCase()
   if (needle && !item.title.toLowerCase().includes(needle)) return false
+  if (filter.projects?.length && !filter.projects.includes(item.path)) return false
   if (filter.tags?.length && !item.tags.some((tag) => filter.tags?.includes(tag))) return false
   if (filter.progress?.length && !filter.progress.includes(projectProgress(item))) return false
   return true

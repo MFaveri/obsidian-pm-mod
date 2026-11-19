@@ -81,6 +81,14 @@ describe('arrangeProjects', () => {
     expect(countProjectFilters(filter)).toBe(2)
   })
 
+  it('filters to specifically selected projects and counts them in active filters', () => {
+    const filter = { projects: ['Website.md', 'Onboarding.md'] }
+    const result = arrangeProjects(roots, state({ filter }), '', never)
+    expect(titles(result)).toEqual([['Website', 'Acme', 'Onboarding']])
+    expect(result.shown).toBe(2)
+    expect(countProjectFilters(filter)).toBe(1)
+  })
+
   it('sorts siblings by several keys, undated projects last either way', () => {
     const byDue = arrangeProjects(roots, state({ sort: [{ key: 'due', dir: 'desc' }] }), '', never)
     expect(titles(byDue)[0].slice(2)).toEqual(['Checkout', 'Onboarding'])

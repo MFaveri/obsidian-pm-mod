@@ -329,6 +329,7 @@
   "group.none": "No {field}",
   "header.addSortKey": "Add sort key",
   "header.allProjects": "All projects",
+  "header.projects": "Projects",
   "header.allTasks": "All tasks",
   "header.builtIn": "Built in",
   "header.changedArchived": "Archived",

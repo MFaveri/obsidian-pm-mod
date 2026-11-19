@@ -32,6 +32,7 @@ If you are looking for the official, community-maintained release in the Obsidia
   - **Portfolio KPIs:** overall completion, overdue & critical task counts, duration/baseline schedule risks, and cross-project assignee overload alerts.
   - **Immediate Focus & Next Actions Queue:** automatically ranks the top actionable, unblocked tasks across all active projects (overdue, critical path, duration risk, near due) with one-click status updates and modal editing.
   - **Upcoming Portfolio Milestones & Project Cards:** side-by-side project cards with health traffic lights (*On track*, *Attention*, *At risk*), next milestone, projected finish date, and the next 3 actionable steps per project.
+  - **Custom Project Selection & Saved Views:** dedicated **Projects** selector (and filter section) to choose exactly which and how many projects are included in the Cockpit KPIs, focus queue, milestones, workload, and cards, with full support for saving custom subsets as named views.
 - **Project Analytics & Charts Dashboard (`ProjectChartsView`)**
   - Dedicated interactive **Charts** view per project, accessible directly via the **"Open charts"** button on Cockpit project cards, the Project Overview header, and tab navigation menus.
   - **Weekly Workload Histogram:** dynamic SVG histogram plotting active tasks overlapping each week with current-week highlighting, overload alerts (`⚡`), completed markers, and toggle between *By status* (on track vs. risk) and *By assignee* (stacked color bars), complete with click drill-down.

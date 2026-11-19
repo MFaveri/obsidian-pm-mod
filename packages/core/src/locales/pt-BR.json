@@ -344,6 +344,7 @@
   "group.none": "Sem {field}",
   "header.addSortKey": "Adicionar critério",
   "header.allProjects": "Todos os projetos",
+  "header.projects": "Projetos",
   "header.allTasks": "Todas as tarefas",
   "header.builtIn": "Padrão",
   "header.changedArchived": "Arquivados",
