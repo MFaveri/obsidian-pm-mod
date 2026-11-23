@@ -22,6 +22,13 @@ export function confirmDuplicateSubtasks(app: App, taskTitle: string): Promise<'
   })
 }
 
+export function confirmConvertNoteLocation(app: App, title: string): Promise<'in-place' | 'move' | null> {
+  return new Promise((resolve) => {
+    const modal = new ConvertNoteModal(app, title, resolve)
+    modal.open()
+  })
+}
+
 /** Returns the trimmed string, or null if cancelled or empty. */
 export function promptText(app: App, label: string, placeholder = '', initial = ''): Promise<string | null> {
   return new Promise((resolve) => {
@@ -196,6 +203,59 @@ class DuplicateSubtasksModal extends Modal {
       .setCta()
       .onClick(() => {
         this.finish('with-subtasks')
+        this.close()
+      })
+  }
+
+  onClose(): void {
+    this.finish(null)
+    this.contentEl.empty()
+  }
+}
+
+class ConvertNoteModal extends Modal {
+  private resolved = false
+
+  constructor(
+    app: App,
+    private noteTitle: string,
+    private resolve: (value: 'in-place' | 'move' | null) => void
+  ) {
+    super(app)
+  }
+
+  private finish(value: 'in-place' | 'move' | null): void {
+    if (this.resolved) return
+    this.resolved = true
+    this.resolve(value)
+  }
+
+  onOpen(): void {
+    const { contentEl } = this
+    this.modalEl.addClass('pm-confirm-modal')
+
+    contentEl.createEl('p', {
+      text: t('convertNote.title', { title: this.noteTitle }),
+      cls: 'pm-confirm-text'
+    })
+
+    const btnRow = contentEl.createDiv('pm-modal-btn-row')
+
+    new ButtonComponent(btnRow).setButtonText(t('common.cancel')).onClick(() => {
+      this.finish(null)
+      this.close()
+    })
+
+    new ButtonComponent(btnRow).setButtonText(t('convertNote.keepInPlace')).onClick(() => {
+      this.finish('in-place')
+      this.close()
+    })
+
+    new ButtonComponent(btnRow)
+      .setButtonText(t('convertNote.moveToFolder'))
+      .setCta()
+      .onClick(() => {
+        this.finish('move')
         this.close()
       })
   }

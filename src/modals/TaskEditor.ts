@@ -314,6 +314,30 @@ export class TaskEditor {
       )
       menu.addSeparator()
     }
+    if (!this.isNew) {
+      menu.addItem((item) =>
+        item
+          .setTitle(t('taskMenu.promoteToSubproject'))
+          .setIcon('folder-kanban')
+          .onClick(
+            safeAsync(async () => {
+              await this.persistTask()
+              const ok = await confirmDialog(
+                this.app,
+                t('promoteTask.confirm', { title: this.task.title, parent: this.project.title }),
+                t('promoteTask.confirmAction')
+              )
+              if (!ok) return
+              const sub = await this.plugin.store.promoteTaskToSubproject(this.project, this.task.id)
+              if (sub) new Notice(t('promoteTask.done', { title: sub.title }))
+              await this.onSave(this.task)
+              this.cancelled = true
+              this.host.close()
+            })
+          )
+      )
+      menu.addSeparator()
+    }
     if (this.task.archived) {
       menu.addItem((item) =>
         item

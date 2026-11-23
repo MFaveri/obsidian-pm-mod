@@ -95,6 +95,24 @@ export function buildTaskContextMenu(menu: Menu, task: Task, ctx: TaskMenuContex
         )
       })
   )
+  menu.addItem((item) =>
+    item
+      .setTitle(t('taskMenu.promoteToSubproject'))
+      .setIcon('folder-kanban')
+      .onClick(
+        safeAsync(async () => {
+          const ok = await confirmDialog(
+            ctx.plugin.app,
+            t('promoteTask.confirm', { title: task.title, parent: ctx.project.title }),
+            t('promoteTask.confirmAction')
+          )
+          if (!ok) return
+          const sub = await ctx.plugin.store.promoteTaskToSubproject(ctx.project, task.id)
+          if (sub) new Notice(t('promoteTask.done', { title: sub.title }))
+          await ctx.onRefresh()
+        })
+      )
+  )
   menu.addSeparator()
   if (task.archived) {
     menu.addItem((item) =>

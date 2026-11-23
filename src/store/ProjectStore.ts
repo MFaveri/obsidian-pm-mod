@@ -68,13 +68,14 @@ import {
   folderOf,
   keepProjectStorageWithNote,
   moveTaskAttachmentFolder,
+  newProjectFolder,
   projectFolderOf,
   projectTaskFolder,
   resolveVaultLink,
   TASK_FOLDER_NAME,
   projectFilePath
 } from './vaultFs'
-import type { ImportNoteOptions, TaskSource } from './TaskSource'
+import type { ConvertNoteOptions, ImportNoteOptions, TaskSource } from './TaskSource'
 
 /** 'fm' writes via processFrontMatter; 'full' rewrites the body too, via vault.process. */
 type DirtyKind = 'fm' | 'full'
@@ -931,6 +932,141 @@ export class ProjectStore implements TaskSource {
     if (patch) Object.assign(project, patch)
     await this.saveProject(project)
     return project
+  }
+
+  private uniqueProjectPath(folder: string, title: string): string {
+    const base = projectFilePath(title, folder)
+    if (!findIgnoringCase(this.app, base) && !findIgnoringCase(this.app, folderOf(base))) return base
+    for (let i = 2; ; i++) {
+      const candidate = projectFilePath(`${title} ${i}`, folder)
+      if (!findIgnoringCase(this.app, candidate) && !findIgnoringCase(this.app, folderOf(candidate))) return candidate
+    }
+  }
+
+  async convertNoteToProject(file: TFile, opts?: ConvertNoteOptions): Promise<Project> {
+    const content = await this.app.vault.read(file)
+    const parsed = parseFrontmatter(content)
+    if (parsed.kind === 'malformed') throw new UnreadableNoteError(file.path)
+    const frontmatter = parsed.kind === 'frontmatter' ? parsed.frontmatter : null
+    if (frontmatter?.[FRONTMATTER_KEY] === true) {
+      const existing = await this.loadProject(file)
+      if (existing) return existing
+    }
+    if (frontmatter?.[TASK_FRONTMATTER_KEY] === true) {
+      throw new Error(`Note "${file.path}" is already a task; promote it to a subproject instead.`)
+    }
+
+    let targetPath = file.path
+    if (opts?.moveToProjectsFolder) {
+      const folder = newProjectFolder(this.app, this.getSettings().projectsFolder, opts.parentPath)
+      const dest = projectFilePath(file.basename, folder)
+      if (findIgnoringCase(this.app, dest)) throw new Error(t('store.projectExists', { title: file.basename }))
+      await this.ensureFolder(folderOf(dest))
+      this.markSelfWrite(file.path)
+      this.markSelfWrite(dest)
+      await this.app.fileManager.renameFile(file, dest)
+      targetPath = dest
+    }
+
+    const project = makeProject(file.basename, targetPath)
+    project.description = projectDescription(frontmatter ?? {}, parsed.body)
+    if (opts?.parentPath) project.parentPath = opts.parentPath
+    this.hydratedBodies.add(project)
+    await this.saveProject(project)
+    return project
+  }
+
+  async promoteTaskToSubproject(project: Project, taskId: string): Promise<Project | null> {
+    const task = findTaskById(project, taskId)
+    if (!task) return null
+    const oldParentId = findParentId(project, taskId)
+
+    await this.loadTaskBody(task)
+    for (const ft of flattenTasks(task.subtasks)) await this.loadTaskBody(ft.task)
+
+    const parentFolder = newProjectFolder(this.app, this.getSettings().projectsFolder, project.filePath)
+    const destPath = this.uniqueProjectPath(parentFolder, task.title)
+    await this.ensureFolder(folderOf(destPath))
+
+    let foreign: Record<string, unknown> = {}
+    if (task.filePath) {
+      const taskFile = this.app.vault.getAbstractFileByPath(task.filePath)
+      if (taskFile instanceof TFile) {
+        const raw = await this.app.vault.read(taskFile)
+        const parsed = parseFrontmatter(raw)
+        if (parsed.kind === 'malformed') throw new UnreadableNoteError(taskFile.path)
+        foreign = foreignFrontmatter(parsed.kind === 'frontmatter' ? parsed.frontmatter : null, TASK_FRONTMATTER_KEYS)
+        this.markSelfWrite(taskFile.path)
+        this.markSelfWrite(destPath)
+        await this.app.fileManager.renameFile(taskFile, destPath)
+        await moveTaskAttachmentFolder(this.app, taskFile.path, destPath)
+      }
+    }
+
+    const removedIds = new Set<string>([task.id, ...flattenTasks(task.subtasks).map((ft) => ft.task.id)])
+    deleteTaskFromTree(project.tasks, taskId)
+    indexRemoveSubtree(project, task)
+    if (oldParentId) this.markDirty(project, [oldParentId], 'full')
+    this.clearReplacementRefs(project, removedIds)
+    for (const ft of flattenTasks(project.tasks)) {
+      const filtered = ft.task.dependencies.filter((dep) => !removedIds.has(dep))
+      if (filtered.length !== ft.task.dependencies.length) {
+        ft.task.dependencies = filtered
+        this.markDirty(project, [ft.task.id], 'full')
+      }
+    }
+
+    const subproject = makeProject(task.title, destPath)
+    subproject.description = task.description
+    subproject.parentPath = project.filePath
+    this.hydratedBodies.add(subproject)
+
+    // Write the converted project note immediately so task-only frontmatter keys are stripped
+    // before `saveProject` runs `doSaveProject` on `destPath`.
+    const destFile = this.app.vault.getAbstractFileByPath(destPath)
+    const initialContent = serializeProject(
+      subproject,
+      this.statusesFor(subproject),
+      this.refsFor(subproject, destPath),
+      foreign
+    )
+    this.markSelfWrite(destPath)
+    if (destFile instanceof TFile) {
+      await this.app.vault.modify(destFile, initialContent)
+    } else {
+      await this.app.vault.create(destPath, initialContent)
+    }
+
+    if (task.subtasks.length > 0) {
+      const targetFolder = projectTaskFolder(this.app, destPath)
+      await this.ensureFolder(targetFolder)
+      for (const child of task.subtasks) {
+        for (const moved of [child, ...flattenTasks(child.subtasks).map((ft) => ft.task)]) {
+          if (!moved.filePath) continue
+          const fileName = moved.filePath.slice(moved.filePath.lastIndexOf('/') + 1)
+          const subDest = this.uniqueChildPath(
+            moved.archived ? normalizePath(targetFolder + '/Archive') : targetFolder,
+            fileName
+          )
+          const subFile = this.app.vault.getAbstractFileByPath(moved.filePath)
+          if (subFile instanceof TFile) {
+            if (moved.archived) await this.ensureFolder(normalizePath(targetFolder + '/Archive'))
+            this.markSelfWrite(moved.filePath)
+            this.markSelfWrite(subDest)
+            await this.app.fileManager.renameFile(subFile, subDest)
+            await moveTaskAttachmentFolder(this.app, moved.filePath, subDest)
+            moved.filePath = subDest
+          }
+        }
+        addTaskToTree(subproject.tasks, child, null)
+        indexAddSubtree(subproject, child, null)
+        this.markSubtreeDirty(subproject, child.id, 'full')
+      }
+    }
+
+    await this.saveProject(subproject)
+    await this.saveProject(project)
+    return subproject
   }
 
   /**

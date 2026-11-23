@@ -2525,3 +2525,56 @@ describe('ProjectStore with a note whose properties will not parse', () => {
     expect(await vault.cachedRead(file)).toBe(MALFORMED)
   })
 })
+
+describe('convertNoteToProject and promoteTaskToSubproject', () => {
+  it('converts a plain note in place, keeping its body and custom frontmatter', async () => {
+    const { store, vault } = newStore()
+    const file = await vault.create('Notes/My Idea.md', '---\ntags: [brainstorm]\ncustom: 42\n---\nSome notes here.')
+
+    const project = await store.convertNoteToProject(file, { moveToProjectsFolder: false })
+
+    expect(project.filePath).toBe('Notes/My Idea.md')
+    expect(project.title).toBe('My Idea')
+    expect(project.description).toBe('Some notes here.')
+    const saved = await vault.cachedRead(file)
+    expect(saved).toContain('pm-project: true')
+    expect(saved).toContain('custom: 42')
+    expect(saved).toContain('Some notes here.')
+  })
+
+  it('converts a plain note and moves it into the projects folder', async () => {
+    const { store, vault } = newStore()
+    const file = await vault.create('Inbox/Launch.md', 'Launch plan body')
+
+    const project = await store.convertNoteToProject(file, { moveToProjectsFolder: true })
+
+    expect(project.filePath).toBe('Projects/Launch/Launch.md')
+    expect(vault.getAbstractFileByPath('Inbox/Launch.md')).toBeNull()
+    expect(vault.getAbstractFileByPath('Projects/Launch/Launch.md')).toBeInstanceOf(TFile)
+    expect(project.description).toBe('Launch plan body')
+  })
+
+  it('promotes a task with subtasks into a subproject and strips task-only frontmatter', async () => {
+    const { store, vault } = newStore()
+    const parent = await store.createProject('Parent', 'Projects')
+    const task = await addNamed(store, parent, 'Website')
+    await store.updateTask(parent, task.id, { description: 'Website scope' })
+    const sub = makeTask({ title: 'Design' })
+    await store.insertTask(parent, sub, task.id)
+
+    const subproject = expectDefined(await store.promoteTaskToSubproject(parent, task.id))
+    expect(subproject.filePath).toBe('Projects/Parent/Website/Website.md')
+    expect(subproject.parentPath).toBe('Projects/Parent/Parent.md')
+    expect(subproject.description).toBe('Website scope')
+    expect(parent.tasks).toHaveLength(0)
+    expect(subproject.tasks).toHaveLength(1)
+    expect(subproject.tasks[0].title).toBe('Design')
+    expect(subproject.tasks[0].filePath).toBe('Projects/Parent/Website/_tasks/design.md')
+
+    const subFile = vault.getAbstractFileByPath(subproject.filePath)
+    if (!(subFile instanceof TFile)) throw new Error('subproject file missing')
+    const content = await vault.cachedRead(subFile)
+    expect(content).toContain('pm-project: true')
+    expect(content).not.toContain('pm-task: true')
+  })
+})

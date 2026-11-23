@@ -8,6 +8,11 @@ export interface ImportNoteOptions {
   handling: 'move' | 'copy'
 }
 
+export interface ConvertNoteOptions {
+  moveToProjectsFolder?: boolean
+  parentPath?: string
+}
+
 /**
  * The persistence surface views, modals, and commands program against (`plugin.store`).
  * ProjectStore implements it over pm-task markdown files; other backends can too.
@@ -40,6 +45,10 @@ export interface TaskSource {
   loadProjectBody(project: Project): Promise<void>
 
   createProject(title: string, folder: string, patch?: ProjectPatch): Promise<Project>
+  /** Converts an existing plain Markdown note into a project, preserving its body and foreign frontmatter. */
+  convertNoteToProject(file: TFile, opts?: ConvertNoteOptions): Promise<Project>
+  /** Promotes a task (and any subtasks) into a subproject of `project`. */
+  promoteTaskToSubproject(project: Project, taskId: string): Promise<Project | null>
   /**
    * Moves a project that still sits beside its `<name>_tasks` folder into a folder of its
    * own. Returns the note's new path, or null when the project already owns a folder.

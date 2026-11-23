@@ -12,6 +12,7 @@ import {
 } from '@dotpm/core'
 import type { ProjectScope, TaskRef } from '#store'
 import { openTaskByPath, openTaskModal } from '#ui/ModalFactory'
+import { buildTaskContextMenu } from '#ui/TaskContextMenu'
 import { toggleCollapsed, toggleGanttProjectCollapsed } from '../collapse'
 
 export interface LabelContext {
@@ -80,6 +81,14 @@ export function renderTaskLabel(
   el.style.height = `${ROW_HEIGHT}px`
   el.style.paddingLeft = `${depth * 18 + 8}px`
   el.dataset.taskId = task.id
+  el.addEventListener('contextmenu', (e: MouseEvent) => {
+    e.preventDefault()
+    buildTaskContextMenu(new Menu(), task, {
+      plugin: ctx.plugin,
+      project,
+      onRefresh: ctx.onRefresh
+    }).showAtMouseEvent(e)
+  })
 
   el.draggable = true
   el.addEventListener('dragstart', (e: DragEvent) => {

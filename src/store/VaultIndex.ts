@@ -74,7 +74,7 @@ interface ProjectTree {
 }
 
 /** A project note dropped inside a project's task storage is task storage, not a project. */
-function insideTaskFolder(path: string): boolean {
+export function insideTaskFolder(path: string): boolean {
   const parts = path.split('/')
   parts.pop()
   return parts.some((segment) => segment.endsWith('_tasks'))
@@ -302,6 +302,10 @@ export class VaultIndex {
 
   projectRef(path: string): ProjectRef | null {
     return this.projects.get(normalizePath(path)) ?? null
+  }
+
+  taskRef(path: string): TaskRef | null {
+    return this.tasks.get(normalizePath(path)) ?? null
   }
 
   projectPaths(includeArchived = false): string[] {

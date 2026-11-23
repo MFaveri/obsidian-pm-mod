@@ -1,4 +1,4 @@
-import { MarkdownView, Notice, Platform, Plugin, WorkspaceLeaf, type ViewState } from 'obsidian'
+import { MarkdownView, Notice, Platform, Plugin, TFile, WorkspaceLeaf, type ViewState } from 'obsidian'
 import {
   DEFAULT_PALETTE_COLOR,
   DEFAULT_SETTINGS,
@@ -26,6 +26,7 @@ import {
   tn
 } from '@dotpm/core'
 import {
+  insideTaskFolder,
   matchPersonNotes,
   personLink,
   ProjectStore,
@@ -55,6 +56,7 @@ import {
   openProjectPicker,
   openTaskPicker,
   openImportModal,
+  confirmConvertNoteLocation,
   confirmDialog,
   promptText
 } from './ui/ModalFactory'
@@ -340,6 +342,56 @@ export default class PMPlugin extends Plugin {
         void this.linkPeopleToNotes()
       }
     })
+
+    this.addCommand({
+      id: 'convert-note-to-project',
+      name: t('commands.convertNoteToProject'),
+      checkCallback: (checking: boolean) => {
+        const file = this.app.workspace.getActiveViewOfType(MarkdownView)?.file
+        if (!file || this.index.projectRef(file.path) || this.index.taskRef(file.path) || insideTaskFolder(file.path)) {
+          return false
+        }
+        if (checking) return true
+        void this.convertNoteFlow(file)
+        return true
+      }
+    })
+
+    this.addCommand({
+      id: 'promote-task-to-subproject',
+      name: t('commands.promoteTaskToSubproject'),
+      checkCallback: (checking: boolean) => {
+        const file = this.app.workspace.getActiveViewOfType(MarkdownView)?.file
+        if (!file || !this.index.taskRef(file.path)) return false
+        if (checking) return true
+        void this.promoteTaskFileFlow(file)
+        return true
+      }
+    })
+
+    this.registerEvent(
+      this.app.workspace.on('file-menu', (menu, abstractFile) => {
+        if (!(abstractFile instanceof TFile) || abstractFile.extension !== 'md') return
+        const taskRef = this.index.taskRef(abstractFile.path)
+        if (taskRef) {
+          menu.addItem((item) =>
+            item
+              .setTitle(t('taskMenu.promoteToSubproject'))
+              .setIcon('folder-kanban')
+              .onClick(safeAsync(() => this.promoteTaskFileFlow(abstractFile)))
+          )
+          return
+        }
+        if (!this.index.projectRef(abstractFile.path) && !insideTaskFolder(abstractFile.path)) {
+          menu.addItem((item) =>
+            item
+              .setTitle(t('commands.convertNoteToProject'))
+              .setIcon('folder-kanban')
+              .onClick(safeAsync(() => this.convertNoteFlow(abstractFile)))
+          )
+        }
+      })
+    )
 
     this.addSettingTab(new PMSettingTab(this.app, this))
     this.notifier.start()
@@ -894,5 +946,32 @@ export default class PMPlugin extends Plugin {
       }
       openImportModal(this, project, onImportComplete)
     }, false)
+  }
+
+  private async convertNoteFlow(file: TFile): Promise<void> {
+    const choice = await confirmConvertNoteLocation(this.app, file.basename)
+    if (!choice) return
+    const project = await this.store.convertNoteToProject(file, {
+      moveToProjectsFolder: choice === 'move'
+    })
+    this.showNotice(t('convertNote.done', { title: project.title }))
+    await this.router.openProjectByPath(project.filePath)
+  }
+
+  private async promoteTaskFileFlow(file: TFile): Promise<void> {
+    const taskRef = this.index.taskRef(file.path)
+    if (!taskRef?.projectPath) return
+    const project = await this.store.loadProjectByPath(taskRef.projectPath)
+    if (!project) return
+    const ok = await confirmDialog(
+      this.app,
+      t('promoteTask.confirm', { title: taskRef.title, parent: project.title }),
+      t('promoteTask.confirmAction')
+    )
+    if (!ok) return
+    const subproject = await this.store.promoteTaskToSubproject(project, taskRef.id)
+    if (!subproject) return
+    this.showNotice(t('promoteTask.done', { title: subproject.title }))
+    await this.router.openProjectByPath(subproject.filePath)
   }
 }

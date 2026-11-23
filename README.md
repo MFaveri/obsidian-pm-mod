@@ -71,6 +71,9 @@ If you are looking for the official, community-maintained release in the Obsidia
   - **Table View:** Optional sortable columns for **Duration**, **Slack**, and **Baseline**, plus native filters for **Critical path**, **Slack (days)**, and **Duration risk**.
   - **Project Overview:** **Schedule health** card (critical tasks count, baseline variance summary, clickable duration risk alerts) and **Team workload** panel.
   - **Static HTML Snapshots:** Exported standalone HTML snapshots and the static viewer preserve CPM highlighting, baseline ghost bars, duration risks, parent rollups, and schedule table columns.
+- **Note-to-Project Conversion & Task-to-Subproject Promotion**
+  - **Convert Note to Project:** Turn any existing Markdown note into a recognized project (keeping it in place or moving it to the projects folder) via the file context menu or command palette, preserving its body and custom frontmatter.
+  - **Promote Task to Subproject:** Promote any task (along with its subtasks) into a nested subproject directly from the task modal `...` menu, Gantt/Table/Kanban context menus, or file menu, migrating subtasks and stripping task-only frontmatter cleanly.
 
 ---
 
