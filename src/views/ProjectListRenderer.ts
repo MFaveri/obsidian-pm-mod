@@ -12,6 +12,7 @@ import {
   t
 } from '@dotpm/core'
 import { safeAsync, CollapseToggle, ProjectRow, projectFieldLabel } from '@dotpm/ui'
+import { openProjectTierMenu } from '#ui/ProjectTierMenu'
 import { linkedRefs } from './linkedRefs'
 
 const columns = (fields: ProjectListField[]): { label: string; cls?: string }[] => [
@@ -43,6 +44,7 @@ export function projectListItems(plugin: PMPlugin): ProjectListItem[] {
       path: ref.path,
       title: ref.title,
       folder: folderOf(projectFolderOf(plugin.app, ref.path) ?? ref.path),
+      tier: ref.tier,
       tags: ref.tags,
       done,
       total,
@@ -92,6 +94,7 @@ export function renderProjectTable(
 }
 
 function groupLabel(groupBy: ProjectGroupBy, key: string): string {
+  if (groupBy === 'tier') return key
   if (groupBy === 'tag') return key ? `#${key}` : t('list.noTag')
   return key ? `${key}/` : t('list.noFolder')
 }
@@ -105,6 +108,7 @@ function renderRow(ctx: ProjectListContext, tbody: HTMLElement, row: ProjectList
     title: ref.title,
     icon: ref.icon,
     color: ref.color,
+    tier: ref.tier,
     depth: row.depth,
     treeGuides: ctx.plugin.settings.showSubtreeConnections ? row.guides : null,
     isLastChild: row.isLastChild,
@@ -124,6 +128,13 @@ function renderRow(ctx: ProjectListContext, tbody: HTMLElement, row: ProjectList
           ctx.redraw()
         })
       : undefined,
+    onPickTier: (e) =>
+      openProjectTierMenu(e, ctx.plugin, ref.tier, async (tier) => {
+        const project = await ctx.plugin.store.loadProjectByPath(ref.path)
+        if (!project) return
+        await ctx.plugin.store.updateProject(project, { tier })
+        ctx.redraw()
+      }),
     onClick: safeAsync(() => ctx.openProject(item.path)),
     onContextMenu: (e) => openProjectContextMenu(ctx, ref, e),
     onActions: (e) => openProjectContextMenu(ctx, ref, e)

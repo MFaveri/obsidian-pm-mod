@@ -720,22 +720,22 @@ describe('project fields popover', () => {
 
   it('hides, shows and puts back the columns, with the title locked first', () => {
     const onChange = vi.fn<(shown: ProjectListField[]) => void>()
-    openProjectFieldsPopover(document.body.createEl('button'), { shown: ['progress', 'tasks', 'due'], onChange })
-    expect(ids('.pm-vis-row:not(.is-hidden)')).toEqual(['project', 'progress', 'tasks', 'due'])
+    openProjectFieldsPopover(document.body.createEl('button'), { shown: ['tier', 'progress', 'tasks', 'due'], onChange })
+    expect(ids('.pm-vis-row:not(.is-hidden)')).toEqual(['project', 'tier', 'progress', 'tasks', 'due'])
     expect(ids('.pm-vis-row.is-hidden')).toEqual(['members'])
     expect(document.body.find('.pm-vis-row')?.find('.pm-vis-eye')).toBeNull()
 
     document.body.find('.pm-vis-row[data-id="tasks"]')?.querySelector<HTMLButtonElement>('.pm-vis-eye')?.click()
-    expect(onChange).toHaveBeenLastCalledWith(['progress', 'due'])
+    expect(onChange).toHaveBeenLastCalledWith(['tier', 'progress', 'due'])
     document.body.find('.pm-vis-row[data-id="members"]')?.querySelector<HTMLButtonElement>('.pm-vis-eye')?.click()
-    expect(onChange).toHaveBeenLastCalledWith(['progress', 'members', 'due'])
+    expect(onChange).toHaveBeenLastCalledWith(['tier', 'progress', 'members', 'due'])
     document.body.find('.pm-vis-row[data-id="tasks"]')?.querySelector<HTMLButtonElement>('.pm-vis-eye')?.click()
-    expect(onChange).toHaveBeenLastCalledWith(['progress', 'tasks', 'members', 'due'])
+    expect(onChange).toHaveBeenLastCalledWith(['tier', 'progress', 'tasks', 'members', 'due'])
     expect(document.body.querySelector<HTMLButtonElement>('.pm-fields-foot .pm-chip-btn')?.disabled).toBe(true)
 
     document.body.find('.pm-vis-row[data-id="due"]')?.querySelector<HTMLButtonElement>('.pm-vis-eye')?.click()
     document.body.find('.pm-fields-foot .pm-chip-btn')?.click()
-    expect(onChange).toHaveBeenLastCalledWith(['progress', 'tasks', 'members', 'due'])
+    expect(onChange).toHaveBeenLastCalledWith(['tier', 'progress', 'tasks', 'members', 'due'])
   })
 })
 

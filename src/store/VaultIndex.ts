@@ -13,6 +13,8 @@ import {
   dedupePeople,
   locale,
   DEFAULT_PROJECT_COLOR,
+  compareTiers,
+  normalizeTier,
   readColor,
   t
 } from '@dotpm/core'
@@ -26,6 +28,7 @@ export interface ProjectRef {
   title: string
   icon: string
   color: string
+  tier: string
   teamMembers: string[]
   /** The note's `tags` property, without the leading `#`. */
   tags: string[]
@@ -312,6 +315,14 @@ export class VaultIndex {
     return this.projectRefs(includeArchived).map((ref) => ref.path)
   }
 
+  /** Every configured tier merged with any custom tier used by indexed projects, in tier order. */
+  allProjectTiers(): string[] {
+    const configured = this.getSettings().projectTiers
+    const seen = new Set<string>(configured)
+    for (const ref of this.projects.values()) seen.add(ref.tier)
+    return [...seen].sort((a, b) => compareTiers(a, b, configured))
+  }
+
   taskRefs(projectPath: string): TaskRef[] {
     const paths = this.tasksByProject.get(normalizePath(projectPath))
     if (!paths) return []
@@ -498,6 +509,7 @@ export class VaultIndex {
       title: str(frontmatter.title, file.basename),
       icon: str(frontmatter.icon, '\u{1F4CB}'),
       color: readColor(frontmatter.color) ?? DEFAULT_PROJECT_COLOR,
+      tier: normalizeTier(frontmatter.tier),
       teamMembers: stringList(frontmatter.teamMembers),
       tags: (typeof frontmatter.tags === 'string' ? frontmatter.tags.split(/[\s,]+/) : stringList(frontmatter.tags))
         .map((tag) => tag.replace(/^#/, ''))

@@ -17,6 +17,7 @@ import {
   PROJECT_LIST_FIELDS,
   projectProgress,
   projectTagCounts,
+  projectTierCounts,
   sameValue,
   t,
   tidyProjectFields,
@@ -71,13 +72,19 @@ const dashboardModeLabel = (mode: ProjectListMode): string =>
   mode === 'cockpit' ? t('dashboard.modeCockpit') : t('dashboard.modeTable')
 
 const sortFields = (): SortField<ProjectSortKey>[] => [
+  { id: 'tier', label: t('columns.tier') },
   { id: 'title', label: t('columns.project') },
   { id: 'progress', label: t('columns.progress') },
   { id: 'due', label: t('columns.due') }
 ]
 
 const groupLabel = (group: ProjectGroupBy): string =>
-  ({ none: t('header.groupNone'), folder: t('header.groupFolder'), tag: t('header.groupTag') })[group]
+  ({
+    none: t('header.groupNone'),
+    tier: t('header.groupTier'),
+    folder: t('header.groupFolder'),
+    tag: t('header.groupTag')
+  })[group]
 
 export class DashboardView extends ItemView {
   private plugin: PMPlugin
@@ -337,6 +344,7 @@ export class DashboardView extends ItemView {
       filter: this.state.filter,
       progress,
       tags: projectTagCounts(this.items),
+      tiers: projectTierCounts(this.items, this.plugin.settings.projectTiers),
       projects: this.projectOptions(),
       onChange: () => {
         this.changed()
@@ -397,7 +405,7 @@ export class DashboardView extends ItemView {
             const draw = (): void => {
               parent.empty()
               const list = parent.createDiv('pm-pop-list')
-              for (const option of ['none', 'folder', 'tag'] as const) {
+              for (const option of ['none', 'tier', 'folder', 'tag'] as const) {
                 renderOptionRow(list, {
                   label: groupLabel(option),
                   selected: this.state.group === option,
@@ -444,7 +452,7 @@ export class DashboardView extends ItemView {
 
   private openGroupMenu(anchor: HTMLElement): void {
     const menu = new Menu()
-    for (const option of ['none', 'folder', 'tag'] as const) {
+    for (const option of ['none', 'tier', 'folder', 'tag'] as const) {
       menu.addItem((item) =>
         item
           .setTitle(groupLabel(option))
@@ -534,8 +542,12 @@ export class DashboardView extends ItemView {
     const { plugin } = this
     const seq = ++this.renderSeq
     this.items = projectListItems(plugin)
-    const { groups, shown, total } = arrangeProjects(this.items, this.state, this.text, (path) =>
-      plugin.isProjectCollapsed(path)
+    const { groups, shown, total } = arrangeProjects(
+      this.items,
+      this.state,
+      this.text,
+      (path) => plugin.isProjectCollapsed(path),
+      plugin.settings.projectTiers
     )
     this.shown = shown
     this.syncHeader(shown, total)

@@ -105,6 +105,8 @@ export interface Project {
   description: string
   color: string // hex
   icon: string // emoji
+  /** Priority tier (e.g. `tier-00`, `tier-01`, ...). Defaults to `tier-00` (most urgent). */
+  tier?: string
   tasks: Task[]
   customFields: CustomFieldDef[]
   teamMembers: string[]
@@ -132,6 +134,7 @@ export type ProjectPatch = Partial<
     | 'description'
     | 'color'
     | 'icon'
+    | 'tier'
     | 'customFields'
     | 'teamMembers'
     | 'savedViews'
@@ -212,7 +215,11 @@ export interface FieldList {
 /** Per view mode. A mode left out shows its default fields. */
 export type ViewFields = Partial<Record<ViewMode, FieldList>>
 
-export const PROJECT_SORT_KEYS = ['title', 'progress', 'due'] as const
+export const DEFAULT_PROJECT_TIER = 'tier-00'
+export const DEFAULT_PROJECT_TIERS = ['tier-00', 'tier-01', 'tier-02', 'tier-03'] as const
+export const DEFAULT_COCKPIT_FOCUS_LIMIT = 10
+
+export const PROJECT_SORT_KEYS = ['tier', 'title', 'progress', 'due'] as const
 export type ProjectSortKey = (typeof PROJECT_SORT_KEYS)[number]
 
 export interface ProjectSortRule {
@@ -228,12 +235,13 @@ export interface ProjectListFilter {
   tags?: string[]
   progress?: ProjectProgress[]
   projects?: string[]
+  tiers?: string[]
 }
 
-export type ProjectGroupBy = 'none' | 'folder' | 'tag'
+export type ProjectGroupBy = 'none' | 'tier' | 'folder' | 'tag'
 
 /** The project list's columns after the title, in their default order. */
-export const PROJECT_LIST_FIELDS = ['progress', 'tasks', 'members', 'due'] as const
+export const PROJECT_LIST_FIELDS = ['tier', 'progress', 'tasks', 'members', 'due'] as const
 export type ProjectListField = (typeof PROJECT_LIST_FIELDS)[number]
 
 export type ProjectListMode = 'cockpit' | 'table'
@@ -439,6 +447,10 @@ export interface PMSettings {
   showArchivedProjects: boolean
   projectList: ProjectListState
   projectListViews: ProjectListView[]
+  /** Ordered list of project priority tiers (e.g. `tier-00`, `tier-01`, ...). */
+  projectTiers: string[]
+  /** Maximum tasks shown in the Executive Cockpit Immediate Focus queue (`0` = all). */
+  cockpitFocusLimit: number
   /** A localhost HTTP and MCP server for other tools on this machine. Desktop only. */
   localApiEnabled: boolean
   localApiPort: number
@@ -546,6 +558,8 @@ export const DEFAULT_SETTINGS: PMSettings = {
   showArchivedProjects: false,
   projectList: makeDefaultProjectList(),
   projectListViews: [],
+  projectTiers: [...DEFAULT_PROJECT_TIERS],
+  cockpitFocusLimit: DEFAULT_COCKPIT_FOCUS_LIMIT,
   localApiEnabled: false,
   localApiPort: LOCAL_API_PORT_BASE,
   localApiToken: '',
@@ -653,6 +667,7 @@ export function makeProject(title: string, filePath: string): Project {
     description: '',
     color: DEFAULT_PROJECT_COLOR,
     icon: DEFAULT_PROJECT_ICON,
+    tier: DEFAULT_PROJECT_TIER,
     tasks: [],
     customFields: [],
     teamMembers: [],

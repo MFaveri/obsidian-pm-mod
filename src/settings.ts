@@ -315,7 +315,13 @@ export class PMSettingTab extends PluginSettingTab {
       {
         type: 'group',
         heading: t('settings.taskFields.heading'),
-        items: [this.statusesPage(), this.prioritiesPage(), this.customFieldsPage(), this.teamMembersPage()]
+        items: [
+          this.statusesPage(),
+          this.prioritiesPage(),
+          this.projectTiersPage(),
+          this.customFieldsPage(),
+          this.teamMembersPage()
+        ]
       },
       {
         type: 'group',
@@ -476,6 +482,59 @@ export class PMSettingTab extends PluginSettingTab {
             name: t('settings.customFields.add'),
             action: () => {
               fields.push({ id: makeId(), name: t('settings.customFields.newLabel'), type: 'text' })
+              this.persist()
+              this.update()
+            }
+          }
+        }
+      ]
+    }
+  }
+
+  private projectTiersPage(): SettingDefinitionPage {
+    const tiers = this.plugin.settings.projectTiers
+    return {
+      type: 'page',
+      name: t('settings.projectTiers.name'),
+      desc: t('settings.projectTiers.desc'),
+      displayValue: () => String(tiers.length),
+      items: [
+        {
+          type: 'list',
+          heading: t('settings.projectTiers.name'),
+          emptyState: t('settings.projectTiers.empty'),
+          items: tiers.map((tier, idx) => ({
+            name: tier,
+            render: (setting: Setting) => {
+              setting.addText((text) => {
+                text.setValue(tier).onChange((val) => {
+                  const trimmed = val.trim()
+                  if (!trimmed || trimmed === tiers[idx]) return
+                  tiers[idx] = trimmed
+                  this.persist()
+                })
+              })
+            }
+          })),
+          onReorder: (from, to) => this.reorder(tiers, from, to),
+          onDelete: (index) => {
+            if (tiers.length <= 1) {
+              new Notice(t('settings.atLeastOneTier'))
+              return
+            }
+            tiers.splice(index, 1)
+            this.persist()
+            this.update()
+          },
+          addItem: {
+            name: t('settings.projectTiers.add'),
+            action: () => {
+              let max = -1
+              for (const existing of tiers) {
+                const m = /^tier-(\d+)$/i.exec(existing.trim())
+                if (m && Number(m[1]) > max) max = Number(m[1])
+              }
+              tiers.push(`tier-${String(max + 1).padStart(2, '0')}`)
               this.persist()
               this.update()
             }

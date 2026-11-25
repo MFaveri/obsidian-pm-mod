@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { today } from '../dates'
 import { DEFAULT_PRIORITIES, DEFAULT_STATUSES, type Project, type ResolvedProjectConfig, type Task } from '../types'
 import { buildTaskIndex } from './TaskIndex'
 import { computePortfolioCockpit } from './PortfolioCockpit'
@@ -65,6 +66,9 @@ function makeProject(partial: Partial<Project>): Project {
 
 describe('computePortfolioCockpit', () => {
   it('computes portfolio KPIs, focus queue, milestones, and cross-project workload', () => {
+    const now = today()
+    const nearDue = now.add({ days: 2 }).toString()
+    const nextWeekDue = now.add({ days: 7 }).toString()
     const p1 = makeProject({
       id: 'p1',
       title: 'Alpha',
@@ -93,7 +97,7 @@ describe('computePortfolioCockpit', () => {
           id: 'm1',
           title: 'v1.0 Launch',
           type: 'milestone',
-          due: '2026-11-25'
+          due: nextWeekDue
         })
       ]
     })
@@ -108,15 +112,15 @@ describe('computePortfolioCockpit', () => {
           title: 'Design UI',
           status: 'todo',
           start: '2026-11-16',
-          due: '2026-11-20',
+          due: nearDue,
           assignees: ['Alice'] // overlaps with t2 across projects on Nov 16-17!
         }),
         makeTask({
           id: 't4',
           title: 'Blocked by UI',
           status: 'todo',
-          start: '2026-11-23',
-          due: '2026-11-25',
+          start: nearDue,
+          due: nextWeekDue,
           dependencies: ['t3']
         })
       ]
@@ -154,5 +158,37 @@ describe('computePortfolioCockpit', () => {
     expect(betaCard?.nextSteps.map((s) => s.task.id)).toEqual(['t3', 't4'])
     expect(betaCard?.nextSteps[0]?.isBlocked).toBe(false)
     expect(betaCard?.nextSteps[1]?.isBlocked).toBe(true)
+  })
+
+  it('ranks higher-tier projects higher in the focus queue and respects focusLimit', () => {
+    const lowTier = makeProject({
+      id: 'low',
+      title: 'Secondary',
+      filePath: 'Secondary.md',
+      tier: 'tier-03',
+      tasks: [
+        makeTask({ id: 's1', title: 'Low task 1', start: '2026-11-18', due: '2026-11-25' }),
+        makeTask({ id: 's2', title: 'Low task 2', start: '2026-11-18', due: '2026-11-26' })
+      ]
+    })
+    const topTier = makeProject({
+      id: 'top',
+      title: 'Urgent',
+      filePath: 'Urgent.md',
+      tier: 'tier-00',
+      tasks: [makeTask({ id: 'u1', title: 'Top task', start: '2026-11-18', due: '2026-11-25' })]
+    })
+
+    const cockpit = computePortfolioCockpit(
+      [
+        { project: lowTier, config: CONFIG },
+        { project: topTier, config: CONFIG }
+      ],
+      { focusLimit: 2, tiers: ['tier-00', 'tier-01', 'tier-02', 'tier-03'] }
+    )
+
+    expect(cockpit.totalFocusCount).toBe(3)
+    expect(cockpit.focusTasks).toHaveLength(2)
+    expect(cockpit.focusTasks[0]?.task.id).toBe('u1')
   })
 })

@@ -11,6 +11,7 @@ import {
   type StatusConfig,
   DEFAULT_PALETTE_COLOR,
   DEFAULT_WORKING_WEEKDAYS,
+  normalizeTier,
   Temporal,
   expandDateRangeOverrides,
   formatDate,
@@ -204,6 +205,22 @@ export class ProjectEditView extends ItemView {
       picker.addEventListener('change', () => {
         this.save({ color: picker.value })
         this.render()
+      })
+      return cell
+    })
+
+    renderPropRow(props, t('project.tier'), () => {
+      const cell = createDiv('pm-prop-value')
+      const current = normalizeTier(project.tier)
+      renderSelectControl({
+        container: cell,
+        value: current,
+        placeholder: current,
+        options: this.plugin.index.allProjectTiers().map((tier) => ({ id: tier, label: tier })),
+        onChange: (tier) => {
+          this.save({ tier })
+          this.render()
+        }
       })
       return cell
     })

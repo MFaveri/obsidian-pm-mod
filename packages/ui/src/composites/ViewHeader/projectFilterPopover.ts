@@ -15,6 +15,8 @@ export interface ProjectFilterProps {
   /** How many projects are at each stage, for the counts beside them. */
   progress: Record<ProjectProgress, number>
   tags: { tag: string; count: number }[]
+  /** Available tiers to filter by. */
+  tiers?: { tier: string; count: number }[]
   /** Available projects to filter by; omitted when the caller does not expose a project checklist here. */
   projects?: ProjectFilterOption[]
   onChange: () => void
@@ -44,6 +46,7 @@ const toggleFilterValue = <T extends string>(list: T[] | undefined, value: T): T
 
 const cleanFilter = (filter: ProjectListFilter): void => {
   if (!filter.projects) Reflect.deleteProperty(filter, 'projects')
+  if (!filter.tiers) Reflect.deleteProperty(filter, 'tiers')
   if (!filter.tags) Reflect.deleteProperty(filter, 'tags')
   if (!filter.progress) Reflect.deleteProperty(filter, 'progress')
 }
@@ -71,6 +74,7 @@ export function renderProjectFilterPanel(parent: HTMLElement, props: ProjectFilt
               disabled: countProjectFilters(filter) === 0,
               onClick: () => {
                 filter.projects = undefined
+                filter.tiers = undefined
                 filter.tags = undefined
                 filter.progress = undefined
                 changed()
@@ -87,6 +91,21 @@ export function renderProjectFilterPanel(parent: HTMLElement, props: ProjectFilt
           changed()
         }
       })
+    }
+
+    if (props.tiers?.length) {
+      renderPopHead(body, { title: t('project.tier'), section: true })
+      for (const { tier, count } of props.tiers) {
+        renderOptionRow(body, {
+          label: tier,
+          note: String(count),
+          selected: filter.tiers?.includes(tier) ?? false,
+          onPick: () => {
+            filter.tiers = toggleFilterValue(filter.tiers, tier)
+            changed()
+          }
+        })
+      }
     }
 
     renderPopHead(body, { title: t('taskForm.tags'), section: true })

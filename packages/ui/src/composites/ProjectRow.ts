@@ -12,6 +12,7 @@ export interface ProjectRowProps {
   title: string
   icon: string
   color: string
+  tier?: string
   depth: number
   /** One entry per indent column: does an ancestor at that column still have rows below it. Null draws no connectors. */
   treeGuides: boolean[] | null
@@ -31,6 +32,7 @@ export interface ProjectRowProps {
   dueUrgency: DueUrgency
   /** Leave it out while the list can't collapse, such as during a search: the row then has no toggle. */
   onToggleCollapsed?: () => void
+  onPickTier?: (e: MouseEvent) => void
   onClick: () => void
   onContextMenu: (e: MouseEvent) => void
   onActions: (e: MouseEvent) => void
@@ -83,6 +85,14 @@ export class ProjectRow {
 
 function renderCell(cell: HTMLElement, field: ProjectListField, props: ProjectRowProps): void {
   switch (field) {
+    case 'tier': {
+      const chip = new Chip(cell)
+        .setLabel(props.tier || 'tier-00')
+        .setVariant('outline')
+        .setSize('sm')
+      if (props.onPickTier) chip.onClick(props.onPickTier)
+      return
+    }
     case 'progress':
       cell.addClass('pm-table-cell-progress')
       new ProgressBar(cell)

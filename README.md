@@ -30,7 +30,8 @@ If you are looking for the official, community-maintained release in the Obsidia
 - **Executive Portfolio Cockpit (Multi-Project Dashboard)**
   - Default interactive **Executive Cockpit** mode in the Projects Dashboard (alongside the classic Table list).
   - **Portfolio KPIs:** overall completion, overdue & critical task counts, duration/baseline schedule risks, and cross-project assignee overload alerts.
-  - **Immediate Focus & Next Actions Queue:** automatically ranks the top actionable, unblocked tasks across all active projects (overdue, critical path, duration risk, near due) with one-click status updates and modal editing.
+  - **Immediate Focus & Next Actions Queue:** automatically ranks the top actionable, unblocked tasks across all active projects (overdue, critical path, duration risk, near due, and project priority tier) with a configurable visible limit (default 10), one-click status updates, and modal editing.
+  - **Project Priority Tiers (`tier-00`, `tier-01`, …):** extensible per-project priority tiers (defaulting to `tier-00` for new/unclassified projects) with one-click switching on Cockpit cards and Table rows, tier-grouped collapsible sections in the Cockpit, and full filter/sort/group support.
   - **Upcoming Portfolio Milestones & Project Cards:** side-by-side project cards with health traffic lights (*On track*, *Attention*, *At risk*), next milestone, projected finish date, and the next 3 actionable steps per project.
   - **Custom Project Selection & Saved Views:** dedicated **Projects** selector (and filter section) to choose exactly which and how many projects are included in the Cockpit KPIs, focus queue, milestones, workload, and cards, with full support for saving custom subsets as named views.
 - **Project Analytics & Charts Dashboard (`ProjectChartsView`)**

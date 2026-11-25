@@ -470,11 +470,17 @@
 }
 .pm-cockpit-section-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--background-modifier-border);
+}
+.pm-cockpit-section-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 .pm-cockpit-focus-list {
   display: flex;

@@ -37,6 +37,7 @@ function projectRef(id: string, path: string): ProjectRef {
     title: id,
     icon: '',
     color: '',
+    tier: 'tier-00',
     teamMembers: [],
     tags: [],
     customFields: [],

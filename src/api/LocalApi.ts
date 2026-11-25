@@ -6,7 +6,8 @@ import {
   findParentId,
   findTaskById,
   flattenTasks,
-  makeTask
+  makeTask,
+  normalizeTier
 } from '@dotpm/core'
 import {
   ApiRequestError,
@@ -44,6 +45,7 @@ function refOf(project: Project): ProjectRef {
     title: project.title,
     icon: project.icon,
     color: project.color,
+    tier: normalizeTier(project.tier),
     teamMembers: project.teamMembers,
     tags: [],
     customFields: project.customFields,

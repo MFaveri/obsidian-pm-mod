@@ -12,14 +12,17 @@ import {
   type ProjectListGroup,
   type StatusConfig,
   type Task,
+  compareTiers,
   computePortfolioCockpit,
   formatDateShort,
+  normalizeTier,
   t,
   tn
 } from '@dotpm/core'
 import {
   Avatar,
   Chip,
+  ChipButton,
   CollapseToggle,
   IconButton,
   type MetricStat,
@@ -31,6 +34,7 @@ import {
   safeAsync
 } from '@dotpm/ui'
 import { openTaskModal } from '#ui/ModalFactory'
+import { openProjectTierMenu } from '#ui/ProjectTierMenu'
 
 export interface CockpitRenderContext {
   plugin: PMPlugin
@@ -43,6 +47,7 @@ export interface CockpitRenderContext {
 }
 
 function groupHeadingLabel(groupBy: ProjectGroupBy, key: string): string {
+  if (groupBy === 'tier') return key
   if (groupBy === 'tag') return key ? `#${key}` : t('list.noTag')
   return key ? `${key}/` : t('list.noFolder')
 }
@@ -99,7 +104,11 @@ export async function renderPortfolioCockpit(
     config: plugin.store.configFor(project)
   }))
 
-  const cockpit = computePortfolioCockpit(entries, plugin.settings.holidays)
+  const cockpit = computePortfolioCockpit(entries, {
+    holidays: plugin.settings.holidays,
+    focusLimit: plugin.settings.cockpitFocusLimit,
+    tiers: plugin.settings.projectTiers
+  })
   contentEl.empty()
   const container = contentEl.createDiv('pm-cockpit')
 
@@ -160,6 +169,8 @@ function renderPortfolioKpis(parent: HTMLElement, cockpit: PortfolioCockpitResul
   renderMetricStrip(parent, stats)
 }
 
+const FOCUS_LIMIT_OPTIONS = [5, 10, 15, 20, 30, 0] as const
+
 function renderFocusSection(
   parent: HTMLElement,
   cockpit: PortfolioCockpitResult,
@@ -167,8 +178,41 @@ function renderFocusSection(
 ): void {
   const section = parent.createDiv('pm-cockpit-section')
   const head = section.createDiv('pm-cockpit-section-head')
-  head.createSpan({ cls: 'pm-section-label', text: t('dashboard.focusHeading') })
-  head.createSpan({ cls: 'pm-overview-note', text: t('dashboard.focusNote') })
+  const titleWrap = head.createDiv('pm-cockpit-section-title')
+  titleWrap.createSpan({ cls: 'pm-section-label', text: t('dashboard.focusHeading') })
+  if (cockpit.totalFocusCount > cockpit.focusTasks.length) {
+    titleWrap.createSpan({
+      cls: 'pm-overview-note',
+      text: t('dashboard.focusShowing', {
+        shown: cockpit.focusTasks.length,
+        total: cockpit.totalFocusCount
+      })
+    })
+  } else {
+    titleWrap.createSpan({ cls: 'pm-overview-note', text: t('dashboard.focusNote') })
+  }
+
+  const limit = ctx.plugin.settings.cockpitFocusLimit
+  const limitLabel = limit > 0 ? `${t('dashboard.focusLimit')}: ${limit}` : `${t('dashboard.focusLimit')}: ${t('dashboard.focusAll')}`
+  const limitBtn = new ChipButton(head).setIcon('sliders-horizontal').setLabel(limitLabel)
+  limitBtn.onClick(() => {
+    const menu = new Menu()
+    for (const opt of FOCUS_LIMIT_OPTIONS) {
+      menu.addItem((item) =>
+        item
+          .setTitle(opt > 0 ? String(opt) : t('dashboard.focusAll'))
+          .setChecked(limit === opt)
+          .onClick(
+            safeAsync(async () => {
+              ctx.plugin.settings.cockpitFocusLimit = opt
+              await ctx.plugin.saveSettings()
+              ctx.redraw()
+            })
+          )
+      )
+    }
+    menu.showAtMouseEvent(new MouseEvent('click', { clientX: limitBtn.el.getBoundingClientRect().left, clientY: limitBtn.el.getBoundingClientRect().bottom + 4 }))
+  })
 
   if (cockpit.focusTasks.length === 0) {
     section.createDiv({ cls: 'pm-overview-muted', text: t('dashboard.noFocusTasks') })
@@ -352,6 +396,44 @@ function renderProjectsGridSection(
   const head = section.createDiv('pm-cockpit-section-head')
   head.createSpan({ cls: 'pm-section-label', text: t('dashboard.projectsHeading') })
 
+  // When no explicit grouping is active, Cockpit cards are grouped into collapsible sections by Tier.
+  if (ctx.groupBy === 'none') {
+    const byTier = new Map<string, ProjectCockpitCard[]>()
+    for (const group of ctx.groups) {
+      for (const row of group.rows) {
+        const cardData = cockpit.cards.get(row.item.path)
+        if (!cardData) continue
+        const tier = normalizeTier(cardData.project.tier)
+        byTier.set(tier, [...(byTier.get(tier) ?? []), cardData])
+      }
+    }
+    const tiers = [...byTier.keys()].sort((a, b) => compareTiers(a, b, ctx.plugin.settings.projectTiers))
+    for (const tier of tiers) {
+      const cards = byTier.get(tier) ?? []
+      const collapseKey = `tier:${tier}`
+      const collapsed = ctx.collapsedGroups.has(collapseKey)
+      const groupBar = section.createDiv('pm-cockpit-group-bar')
+      new CollapseToggle(groupBar, {
+        collapsed,
+        subject: tier,
+        onToggle: () => {
+          if (collapsed) ctx.collapsedGroups.delete(collapseKey)
+          else ctx.collapsedGroups.add(collapseKey)
+          ctx.redraw()
+        }
+      })
+      groupBar.createSpan({ cls: 'pm-project-group-label', text: tier })
+      groupBar.createSpan({ cls: 'pm-project-group-count', text: String(cards.length) })
+      if (collapsed) continue
+
+      const grid = section.createDiv('pm-cockpit-grid')
+      for (const cardData of cards) {
+        renderProjectCard(grid, cardData, ctx)
+      }
+    }
+    return
+  }
+
   for (const group of ctx.groups) {
     const collapsed = group.key !== null && ctx.collapsedGroups.has(group.key)
     if (group.key !== null) {
@@ -402,6 +484,18 @@ function renderProjectCard(
   )
 
   const actions = head.createDiv('pm-cockpit-card-actions')
+  const tier = normalizeTier(project.tier)
+  const tierChip = new Chip(actions)
+    .setLabel(tier)
+    .setVariant(tier === 'tier-00' ? 'solid' : 'outline')
+    .setSize('sm')
+  if (tier === 'tier-00') tierChip.setColor('var(--color-red)')
+  tierChip.onClick((e) => {
+    openProjectTierMenu(e, ctx.plugin, project.tier, async (nextTier) => {
+      await ctx.plugin.store.updateProject(project, { tier: nextTier })
+      ctx.redraw()
+    })
+  })
   renderHealthChip(actions, card.health)
 
   new IconButton(actions)

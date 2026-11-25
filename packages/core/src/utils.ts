@@ -133,3 +133,34 @@ export function priorityIcon(priorities: PriorityConfig[], id: TaskPriority, ico
   const rank = priorities.findIndex((p) => p.id === id)
   return PRIORITY_ICON_SETS[iconSet][rank] ?? ''
 }
+
+export function normalizeTier(raw: unknown): string {
+  if (typeof raw !== 'string') return 'tier-00'
+  const trimmed = raw.trim()
+  return trimmed || 'tier-00'
+}
+
+/** Compares two tier strings, honoring `configuredTiers` order first and falling back to natural numeric order. */
+export function compareTiers(a: string, b: string, configuredTiers?: readonly string[]): number {
+  if (configuredTiers?.length) {
+    const ia = configuredTiers.indexOf(a)
+    const ib = configuredTiers.indexOf(b)
+    if (ia !== -1 && ib !== -1) return ia - ib
+    if (ia !== -1) return -1
+    if (ib !== -1) return 1
+  }
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+}
+
+/** Suggests the next sequential tier name (e.g. `tier-04` after `tier-00..tier-03`). */
+export function nextTierName(existing: readonly string[]): string {
+  let max = -1
+  for (const tier of existing) {
+    const match = /^tier-(\d+)$/i.exec(tier.trim())
+    if (match) {
+      const n = Number(match[1])
+      if (n > max) max = n
+    }
+  }
+  return `tier-${String(max + 1).padStart(2, '0')}`
+}

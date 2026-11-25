@@ -14,6 +14,7 @@ function item(title: string, overrides: Partial<ProjectListItem> = {}): ProjectL
     path: `${title}.md`,
     title,
     folder: '',
+    tier: 'tier-00',
     tags: [],
     done: 0,
     total: 0,
@@ -133,7 +134,7 @@ describe('project helpers', () => {
 
 describe('tidyProjectFields', () => {
   it('drops the list once every column shows in the default order', () => {
-    expect(tidyProjectFields(['progress', 'tasks', 'members', 'due'])).toBeUndefined()
+    expect(tidyProjectFields(['tier', 'progress', 'tasks', 'members', 'due'])).toBeUndefined()
     expect(tidyProjectFields(undefined)).toBeUndefined()
   })
 
@@ -141,5 +142,22 @@ describe('tidyProjectFields', () => {
     expect(tidyProjectFields(['due', 'progress', 'tasks', 'members'])).toEqual(['due', 'progress', 'tasks', 'members'])
     expect(tidyProjectFields(['progress', 'due'])).toEqual(['progress', 'due'])
     expect(tidyProjectFields([])).toEqual([])
+  })
+})
+
+describe('project tiers in arrangeProjects', () => {
+  it('filters, sorts and groups projects by tier', () => {
+    const t2 = item('Secondary', { tier: 'tier-02' })
+    const t0 = item('Urgent', { tier: 'tier-00' })
+    const t1 = item('Important', { tier: 'tier-01' })
+
+    const sorted = arrangeProjects([t2, t0, t1], state({ sort: [{ key: 'tier', dir: 'asc' }] }), '', never)
+    expect(titles(sorted)).toEqual([['Urgent', 'Important', 'Secondary']])
+
+    const grouped = arrangeProjects([t2, t0, t1], state({ group: 'tier' }), '', never)
+    expect(grouped.groups.map((g) => g.key)).toEqual(['tier-00', 'tier-01', 'tier-02'])
+
+    const filtered = arrangeProjects([t2, t0, t1], state({ filter: { tiers: ['tier-00', 'tier-01'] } }), '', never)
+    expect(titles(filtered)).toEqual([['Urgent', 'Important']])
   })
 })

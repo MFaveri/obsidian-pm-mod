@@ -1,6 +1,13 @@
 import { parsePlainDate, Temporal, today } from '../dates'
-import type { DueUrgency, Project, ResolvedProjectConfig, StatusConfig, Task } from '../types'
-import { dateUrgency, isTerminalStatus } from '../utils'
+import {
+  DEFAULT_COCKPIT_FOCUS_LIMIT,
+  type DueUrgency,
+  type Project,
+  type ResolvedProjectConfig,
+  type StatusConfig,
+  type Task
+} from '../types'
+import { compareTiers, dateUrgency, isTerminalStatus, normalizeTier } from '../utils'
 import { computeScheduleHealth } from './Scheduler'
 import { excludeSupersededTasks } from './TaskFilter'
 import { flattenTasks } from './TaskTreeOps'
@@ -78,15 +85,32 @@ export interface PortfolioTaskLookup {
 export interface PortfolioCockpitResult {
   metrics: PortfolioMetrics
   focusTasks: PortfolioFocusTask[]
+  totalFocusCount: number
   upcomingMilestones: PortfolioMilestone[]
   overloadedAssignees: AssigneeWorkload[]
   cards: Map<string, ProjectCockpitCard>
   taskLookup: Map<string, PortfolioTaskLookup>
 }
 
-const MAX_FOCUS_TASKS = 8
+export interface PortfolioCockpitOptions {
+  holidays?: readonly string[]
+  focusLimit?: number
+  tiers?: readonly string[]
+}
+
 const MAX_MILESTONES = 6
 const MAX_NEXT_STEPS_PER_PROJECT = 3
+
+function tierBoost(rawTier: string | undefined, configuredTiers?: readonly string[]): number {
+  const tier = normalizeTier(rawTier)
+  if (configuredTiers?.length) {
+    const idx = configuredTiers.indexOf(tier)
+    if (idx !== -1) return Math.max(0, 160 - idx * 35)
+  }
+  const match = /^tier-(\d+)$/i.exec(tier)
+  if (match) return Math.max(0, 160 - Number(match[1]) * 35)
+  return 0
+}
 
 function priorityBoost(priority: string): number {
   switch (priority) {
@@ -104,8 +128,14 @@ function priorityBoost(priority: string): number {
 
 export function computePortfolioCockpit(
   entries: PortfolioProjectEntry[],
-  holidays: readonly string[] = []
+  holidaysOrOptions: readonly string[] | PortfolioCockpitOptions = []
 ): PortfolioCockpitResult {
+  const options: PortfolioCockpitOptions = Array.isArray(holidaysOrOptions)
+    ? { holidays: holidaysOrOptions }
+    : (holidaysOrOptions as PortfolioCockpitOptions)
+  const holidays = options.holidays ?? []
+  const focusLimit = options.focusLimit ?? DEFAULT_COCKPIT_FOCUS_LIMIT
+  const configuredTiers = options.tiers
   const now = today()
   const knownIds = new Set<string>()
   const completedIds = new Set<string>()
@@ -242,7 +272,7 @@ export function computePortfolioCockpit(
           shortfallDays,
           urgency,
           isBlocked,
-          score
+          score: score + tierBoost(project.tier, configuredTiers)
         })
       }
     }
@@ -288,6 +318,8 @@ export function computePortfolioCockpit(
 
   allFocusCandidates.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score
+    const tierCmp = compareTiers(normalizeTier(a.project.tier), normalizeTier(b.project.tier), configuredTiers)
+    if (tierCmp !== 0) return tierCmp
     if (a.task.due && b.task.due) return a.task.due.localeCompare(b.task.due)
     return a.task.title.localeCompare(b.task.title)
   })
@@ -300,6 +332,7 @@ export function computePortfolioCockpit(
   const overloadedAssignees = workload.assignees.filter((a) => a.isOverloaded)
 
   const overallProgress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0
+  const focusTasks = focusLimit > 0 ? allFocusCandidates.slice(0, focusLimit) : allFocusCandidates
 
   return {
     metrics: {
@@ -313,7 +346,8 @@ export function computePortfolioCockpit(
       baselineLateCount,
       overloadedAssigneesCount: overloadedAssignees.length
     },
-    focusTasks: allFocusCandidates.slice(0, MAX_FOCUS_TASKS),
+    focusTasks,
+    totalFocusCount: allFocusCandidates.length,
     upcomingMilestones: allMilestones.slice(0, MAX_MILESTONES),
     overloadedAssignees,
     cards,

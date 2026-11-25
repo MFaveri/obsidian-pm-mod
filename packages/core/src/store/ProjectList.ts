@@ -6,6 +6,7 @@ import {
   type ProjectSortRule,
   PROJECT_LIST_FIELDS
 } from '../types'
+import { compareTiers } from '../utils'
 import { sameValue } from './ViewState'
 
 /**
@@ -17,6 +18,7 @@ export interface ProjectListItem {
   title: string
   /** The folder holding the project's own folder, `''` at the vault root. */
   folder: string
+  tier: string
   tags: string[]
   done: number
   total: number
@@ -53,7 +55,12 @@ export function projectProgress(item: ProjectListItem): ProjectProgress {
 }
 
 export function countProjectFilters(filter: ProjectListFilter): number {
-  return (filter.projects?.length ? 1 : 0) + (filter.tags?.length ? 1 : 0) + (filter.progress?.length ? 1 : 0)
+  return (
+    (filter.projects?.length ? 1 : 0) +
+    (filter.tiers?.length ? 1 : 0) +
+    (filter.tags?.length ? 1 : 0) +
+    (filter.progress?.length ? 1 : 0)
+  )
 }
 
 export function isProjectQueryActive(filter: ProjectListFilter, text: string): boolean {
@@ -64,6 +71,7 @@ function matches(item: ProjectListItem, filter: ProjectListFilter, text: string)
   const needle = text.trim().toLowerCase()
   if (needle && !item.title.toLowerCase().includes(needle)) return false
   if (filter.projects?.length && !filter.projects.includes(item.path)) return false
+  if (filter.tiers?.length && !filter.tiers.includes(item.tier)) return false
   if (filter.tags?.length && !item.tags.some((tag) => filter.tags?.includes(tag))) return false
   if (filter.progress?.length && !filter.progress.includes(projectProgress(item))) return false
   return true
@@ -71,7 +79,12 @@ function matches(item: ProjectListItem, filter: ProjectListFilter, text: string)
 
 const ratio = (item: ProjectListItem): number => (item.total ? item.done / item.total : 0)
 
-function compareItems(a: ProjectListItem, b: ProjectListItem, sort: ProjectSortRule[]): number {
+function compareItems(
+  a: ProjectListItem,
+  b: ProjectListItem,
+  sort: ProjectSortRule[],
+  configuredTiers?: readonly string[]
+): number {
   for (const { key, dir } of sort) {
     // A project with no dates sorts after every dated one, whichever way the dates run.
     if (key === 'due' && (!a.latestDue || !b.latestDue)) {
@@ -80,11 +93,13 @@ function compareItems(a: ProjectListItem, b: ProjectListItem, sort: ProjectSortR
       continue
     }
     const order =
-      key === 'title'
-        ? a.title.localeCompare(b.title)
-        : key === 'progress'
-          ? ratio(a) - ratio(b)
-          : a.latestDue.localeCompare(b.latestDue)
+      key === 'tier'
+        ? compareTiers(a.tier, b.tier, configuredTiers)
+        : key === 'title'
+          ? a.title.localeCompare(b.title)
+          : key === 'progress'
+            ? ratio(a) - ratio(b)
+            : a.latestDue.localeCompare(b.latestDue)
     if (order !== 0) return dir === 'asc' ? order : -order
   }
   return 0
@@ -102,6 +117,18 @@ export function projectTagCounts(roots: ProjectListItem[]): { tag: string; count
   return [...counts].map(([tag, count]) => ({ tag, count })).sort((a, b) => a.tag.localeCompare(b.tag))
 }
 
+/** Each tier used by any project, with how many projects carry it, in tier order. */
+export function projectTierCounts(
+  roots: ProjectListItem[],
+  configuredTiers?: readonly string[]
+): { tier: string; count: number }[] {
+  const counts = new Map<string, number>()
+  for (const item of allProjectItems(roots)) counts.set(item.tier, (counts.get(item.tier) ?? 0) + 1)
+  return [...counts]
+    .map(([tier, count]) => ({ tier, count }))
+    .sort((a, b) => compareTiers(a.tier, b.tier, configuredTiers))
+}
+
 /**
  * The project list as it is drawn: grouped when asked, each group a tree of rows in sort
  * order. A query keeps a project when it or a sub-project matches, so a match is always
@@ -111,7 +138,8 @@ export function arrangeProjects(
   roots: ProjectListItem[],
   state: ProjectListState,
   text: string,
-  isCollapsed: (path: string) => boolean
+  isCollapsed: (path: string) => boolean,
+  configuredTiers?: readonly string[]
 ): { groups: ProjectListGroup[]; shown: number; total: number } {
   const active = isProjectQueryActive(state.filter, text)
   const hit = new Set(
@@ -121,7 +149,7 @@ export function arrangeProjects(
   )
   const kept = (item: ProjectListItem): boolean => hit.has(item.path) || item.children.some(kept)
   const ordered = (items: ProjectListItem[]): ProjectListItem[] =>
-    items.filter(kept).sort((a, b) => compareItems(a, b, state.sort))
+    items.filter(kept).sort((a, b) => compareItems(a, b, state.sort, configuredTiers))
 
   const flatten = (items: ProjectListItem[], trail: boolean[], rows: ProjectListRow[]): ProjectListRow[] => {
     const list = ordered(items)
@@ -153,10 +181,25 @@ export function arrangeProjects(
 
   const byKey = new Map<string, ProjectListItem[]>()
   for (const root of roots) {
-    const keys = state.group === 'folder' ? [root.folder] : root.tags.length ? root.tags : ['']
+    const keys =
+      state.group === 'tier'
+        ? [root.tier]
+        : state.group === 'folder'
+          ? [root.folder]
+          : root.tags.length
+            ? root.tags
+            : ['']
     for (const key of keys) byKey.set(key, [...(byKey.get(key) ?? []), root])
   }
-  const keys = [...byKey.keys()].sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)))
+  const keys = [...byKey.keys()].sort((a, b) =>
+    state.group === 'tier'
+      ? compareTiers(a, b, configuredTiers)
+      : a === ''
+        ? 1
+        : b === ''
+          ? -1
+          : a.localeCompare(b)
+  )
   const groups = keys
     .map((key) => {
       const members = byKey.get(key) ?? []

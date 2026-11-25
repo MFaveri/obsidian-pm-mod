@@ -1,6 +1,6 @@
 import { App, ButtonComponent, ExtraButtonComponent, Keymap, Modal, setIcon } from 'obsidian'
 import type PMPlugin from '#main'
-import { DEFAULT_PROJECT_COLOR, DEFAULT_PROJECT_ICON, t } from '@dotpm/core'
+import { DEFAULT_PROJECT_COLOR, DEFAULT_PROJECT_ICON, DEFAULT_PROJECT_TIER, t } from '@dotpm/core'
 import { findIgnoringCase, newProjectFolder, projectFilePath } from '#store'
 import { safeAsync, renderPropRow, renderIconControl, renderSelectControl } from '@dotpm/ui'
 import { saveShortcutLabel } from '../utils'
@@ -10,6 +10,7 @@ interface Draft {
   title: string
   icon: string
   color: string
+  tier: string
   parentPath: string
   teamMembers: string[]
   description: string
@@ -21,6 +22,7 @@ export class ProjectCreateModal extends Modal {
     title: '',
     icon: DEFAULT_PROJECT_ICON,
     color: DEFAULT_PROJECT_COLOR,
+    tier: DEFAULT_PROJECT_TIER,
     parentPath: '',
     teamMembers: [],
     description: ''
@@ -54,6 +56,7 @@ export class ProjectCreateModal extends Modal {
     const grid = body.createDiv('pm-te-props').createDiv('pm-prop-grid')
     this.renderIcon(grid)
     this.renderColor(grid)
+    this.renderTier(grid)
     this.renderParent(grid)
     this.renderMembers(grid)
 
@@ -159,6 +162,32 @@ export class ProjectCreateModal extends Modal {
         return cell
       },
       'palette'
+    )
+  }
+
+  private renderTier(parent: HTMLElement): void {
+    renderPropRow(
+      parent,
+      t('project.tier'),
+      () => {
+        const cell = createDiv('pm-prop-value')
+        const draw = (): void => {
+          cell.empty()
+          renderSelectControl({
+            container: cell,
+            value: this.draft.tier,
+            placeholder: DEFAULT_PROJECT_TIER,
+            options: this.plugin.index.allProjectTiers().map((tier) => ({ id: tier, label: tier })),
+            onChange: (tier) => {
+              this.draft.tier = tier
+              draw()
+            }
+          })
+        }
+        draw()
+        return cell
+      },
+      'layers'
     )
   }
 
@@ -287,6 +316,7 @@ export class ProjectCreateModal extends Modal {
     const project = await this.plugin.store.createProject(title, this.targetFolder(), {
       icon: this.draft.icon,
       color: this.draft.color,
+      tier: this.draft.tier,
       description: this.draft.description,
       teamMembers: this.draft.teamMembers,
       parentPath: this.draft.parentPath || undefined
