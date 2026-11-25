@@ -244,7 +244,7 @@ export type ProjectGroupBy = 'none' | 'tier' | 'folder' | 'tag'
 export const PROJECT_LIST_FIELDS = ['tier', 'progress', 'tasks', 'members', 'due'] as const
 export type ProjectListField = (typeof PROJECT_LIST_FIELDS)[number]
 
-export type ProjectListMode = 'cockpit' | 'table'
+export type ProjectListMode = 'cockpit' | 'cards' | 'table'
 
 /** What the project list shows. Archived projects follow `PMSettings.showArchivedProjects`. */
 export interface ProjectListState {
@@ -451,6 +451,8 @@ export interface PMSettings {
   projectTiers: string[]
   /** Maximum tasks shown in the Executive Cockpit Immediate Focus queue (`0` = all). */
   cockpitFocusLimit: number
+  /** Default mode for the Projects Dashboard (`'cockpit'` when omitted). */
+  defaultDashboardMode?: ProjectListMode
   /** A localhost HTTP and MCP server for other tools on this machine. Desktop only. */
   localApiEnabled: boolean
   localApiPort: number

@@ -42,6 +42,7 @@ export interface CockpitRenderContext {
   groups: ProjectListGroup[]
   groupBy: ProjectGroupBy
   collapsedGroups: Set<string>
+  cardsOnly?: boolean
   openProject: (path: string) => Promise<void>
   redraw: () => void
 }
@@ -112,13 +113,15 @@ export async function renderPortfolioCockpit(
   contentEl.empty()
   const container = contentEl.createDiv('pm-cockpit')
 
-  renderPortfolioKpis(container, cockpit)
-  renderFocusSection(container, cockpit, ctx)
-  if (cockpit.upcomingMilestones.length > 0) {
-    renderMilestonesSection(container, cockpit.upcomingMilestones, ctx)
-  }
-  if (cockpit.overloadedAssignees.length > 0) {
-    renderCrossProjectWorkloadSection(container, cockpit, ctx)
+  if (!ctx.cardsOnly) {
+    renderPortfolioKpis(container, cockpit)
+    renderFocusSection(container, cockpit, ctx)
+    if (cockpit.upcomingMilestones.length > 0) {
+      renderMilestonesSection(container, cockpit.upcomingMilestones, ctx)
+    }
+    if (cockpit.overloadedAssignees.length > 0) {
+      renderCrossProjectWorkloadSection(container, cockpit, ctx)
+    }
   }
   renderProjectsGridSection(container, cockpit, ctx)
 }

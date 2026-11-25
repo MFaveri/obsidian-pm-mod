@@ -28,7 +28,7 @@ If you are looking for the official, community-maintained release in the Obsidia
 ## Features Added on Top of `dotpm`
 
 - **Executive Portfolio Cockpit (Multi-Project Dashboard)**
-  - Default interactive **Executive Cockpit** mode in the Projects Dashboard (alongside the classic Table list).
+  - Default interactive **Executive Cockpit** mode in the Projects Dashboard (alongside a focused **Cards** mode and the classic **Table** list, with a one-click **"Use as default view"** toggle in the view switcher).
   - **Portfolio KPIs:** overall completion, overdue & critical task counts, duration/baseline schedule risks, and cross-project assignee overload alerts.
   - **Immediate Focus & Next Actions Queue:** automatically ranks the top actionable, unblocked tasks across all active projects (overdue, critical path, duration risk, near due, and project priority tier) with a configurable visible limit (default 10), one-click status updates, and modal editing.
   - **Project Priority Tiers (`tier-00`, `tier-01`, …):** extensible per-project priority tiers (defaulting to `tier-00` for new/unclassified projects) with one-click switching on Cockpit cards and Table rows, tier-grouped collapsible sections in the Cockpit, and full filter/sort/group support.
