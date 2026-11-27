@@ -145,3 +145,4 @@ Licensed under the **MIT License** — see [LICENSE](LICENSE) for full details.
 - Original work: `Copyright (c) 2026 Stepan Kropachev and dotpm contributors`
 - Modifications in this repository: `Copyright (c) 2026 MFaveri (PM Workbench modifications)`
 
+trigger2
