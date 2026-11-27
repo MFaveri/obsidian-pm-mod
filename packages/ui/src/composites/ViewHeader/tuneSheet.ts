@@ -74,5 +74,11 @@ export function renderTuneSheetPanel(parent: HTMLElement, props: TuneSheetProps,
 }
 
 /** The sheet in a popover, which a phone draws as a bottom sheet. */
-export const openTuneSheet = (anchor: HTMLElement, props: TuneSheetProps): Popover =>
-  Popover.show({ anchor, align: 'right', width: 360 }, (el, close) => renderTuneSheetPanel(el, props, close))
+export const openTuneSheet = (anchor: HTMLElement, props: TuneSheetProps): Popover => {
+  const pop = Popover.show({ anchor, align: 'right', width: 360 }, (el, close) =>
+    renderTuneSheetPanel(el, props, close)
+  )
+  // Lets the popover's own stylesheet add its phone-sheet backdrop without a `:has()` lookup.
+  pop.contentEl.parentElement?.addClass('pm-pop--has-tune-sheet')
+  return pop
+}

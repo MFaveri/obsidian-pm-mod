@@ -1,6 +1,6 @@
 {
   "name": "pm-workbench",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Personal spin-off of dotpm for Obsidian: Markdown project management with Table, Gantt, Kanban, CPM, Baseline, Dependencies & Workload.",
   "repository": "github:MFaveri/obsidian-pm-mod",
   "type": "module",

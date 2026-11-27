@@ -882,7 +882,7 @@ input.pm-days-input {
   box-shadow: var(--shadow-s);
   --icon-size: 24px;
 }
-.pm-root:has(.pm-vh--phone) .pm-content {
+.pm-root--phone .pm-content {
   padding-bottom: 88px;
 }
 
@@ -917,7 +917,7 @@ input.pm-days-input {
 button.pm-tune-sheet-done {
   flex: 1;
 }
-.pm-pop--sheet:has(.pm-tune-sheet) {
+.pm-pop--sheet.pm-pop--has-tune-sheet {
   box-shadow: 0 0 0 100vmax var(--background-modifier-cover);
 }
 .pm-pop--sheet button.pm-pop-item {

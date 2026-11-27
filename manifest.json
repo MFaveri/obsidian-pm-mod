@@ -1,7 +1,7 @@
 {
   "id": "pm-workbench",
   "name": "PM Workbench",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minAppVersion": "1.13.0",
   "description": "Personal spin-off of dotpm: Markdown project management with Table, Gantt and Kanban views, CPM critical path, baseline tracking, FS/SS/FF dependencies with lag/lead, duration risk, parent rollup and workload analysis.",
   "author": "MFaveri (forked from dotpm by Stepan Kropachev)",

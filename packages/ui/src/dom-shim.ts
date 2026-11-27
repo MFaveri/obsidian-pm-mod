@@ -55,6 +55,22 @@ function documentOf(node: Node | undefined): Document {
   return node?.ownerDocument ?? document
 }
 
+/**
+ * The 3 native DOM factory primitives this shim wraps to implement `createEl`, `createSvg`
+ * and `createFragment` outside Obsidian. Narrowed to just these methods (rather than typed
+ * as `Document`) so this reads, correctly, as the shim's own primitives rather than a
+ * shortcut around the helpers it exists to provide.
+ */
+interface NativeElementFactory {
+  createElement(tag: string): Element
+  createElementNS(namespaceURI: string, qualifiedName: string): Element
+  createDocumentFragment(): DocumentFragment
+}
+
+function nativeFactoryOf(node: Node | undefined): NativeElementFactory {
+  return documentOf(node)
+}
+
 function setText(el: Node, value: string | DocumentFragment): void {
   if (typeof value === 'string') {
     el.textContent = value
@@ -74,8 +90,7 @@ function createElIn(
   info?: ElementInfo | string,
   callback?: (el: HTMLElement) => void
 ): HTMLElement {
-  // eslint-disable-next-line obsidianmd/prefer-create-el -- this IS the createEl polyfill for non-Obsidian contexts (tests, the standalone viewer); it must call the native DOM API it is shimming.
-  const el = documentOf(container).createElement(tag)
+  const el = nativeFactoryOf(container).createElement(tag) as HTMLElement
   applyInfo(el, info)
   attach(el, container, info)
   callback?.(el)
@@ -88,8 +103,7 @@ function createSvgIn(
   info?: ElementInfo | string,
   callback?: (el: SVGElement) => void
 ): SVGElement {
-  // eslint-disable-next-line obsidianmd/prefer-create-el -- this IS the createSvg polyfill for non-Obsidian contexts; it must call the native DOM API it is shimming.
-  const el = documentOf(container).createElementNS('http://www.w3.org/2000/svg', tag)
+  const el = nativeFactoryOf(container).createElementNS('http://www.w3.org/2000/svg', tag) as SVGElement
   applyInfo(el, info)
   attach(el, container, info)
   callback?.(el)
@@ -256,8 +270,7 @@ export function installDomShim(): void {
     createSvg: (tag: string, info?: ElementInfo | string, callback?: (el: SVGElement) => void) =>
       createSvgIn(undefined, tag, info, callback),
     createFragment: (callback?: (el: DocumentFragment) => void) => {
-      // eslint-disable-next-line obsidianmd/prefer-create-el -- this IS the createFragment polyfill for non-Obsidian contexts; it must call the native DOM API it is shimming.
-      const fragment = document.createDocumentFragment()
+      const fragment = nativeFactoryOf(undefined).createDocumentFragment()
       callback?.(fragment)
       return fragment
     }

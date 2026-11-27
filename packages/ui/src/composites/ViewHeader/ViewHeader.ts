@@ -69,7 +69,12 @@ export class ViewHeader {
     this.bar = this.el.createDiv('pm-vh-bar')
     this.observer = new ResizeObserver(() => this.fit())
     this.observer.observe(this.row)
-    if (this.phone) this.el.addClasses(PHONE_LEVELS)
+    if (this.phone) {
+      this.el.addClasses(PHONE_LEVELS)
+      // Lets the view's own root react to phone mode (e.g. content padding) without a
+      // `:has()` lookup; `headerEl` is already mounted under `.pm-root` at this point.
+      parentEl.closest<HTMLElement>('.pm-root')?.addClass('pm-root--phone')
+    }
   }
 
   /** The controls the Tune button lists, asked again each time it opens so their state is current. */
