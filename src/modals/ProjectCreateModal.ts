@@ -47,6 +47,7 @@ export class ProjectCreateModal extends Modal {
     contentEl.empty()
     contentEl.addClass('pm-te-modal', 'pm-te-surface')
     this.modalEl.addClass('pm-modal', 'pm-modal--create')
+    this.containerEl.addClass('pm-modal-container--create')
 
     this.renderHeader(contentEl)
 

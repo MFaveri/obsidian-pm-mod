@@ -123,6 +123,12 @@ The compiled plugin artifacts (`main.js`, `styles.css`, `manifest.json`) are gen
 
 ---
 
+## Permissions & Privacy
+
+PM Workbench reads and writes only the Markdown notes you organize into projects/tasks (via Obsidian's `Vault` API), so it needs to enumerate vault files to find and link those notes — it never reads unrelated files' content, and nothing leaves your machine. The optional **Local API** (HTTP/MCP, off by default) only binds to `127.0.0.1`, requires a token, and lets other local tools on the same computer read/edit tasks. Clipboard access is used solely for explicit user actions (e.g. "Copy as Markdown" / paste-to-import), never read in the background.
+
+---
+
 ## Development
 
 ```bash

@@ -460,15 +460,15 @@ button.pm-icon-trigger {
 .pm-modal--task .modal-container .modal-header-button,
 .pm-modal--create .modal-close-button,
 .pm-modal--create .modal-header-button,
-.modal-container:has(.pm-modal--task) .modal-close-button,
-.modal-container:has(.pm-modal--task) .modal-header-button,
-.modal:has(.pm-modal--task) .modal-close-button,
-.modal:has(.pm-modal--task) .modal-header-button,
-.modal-container:has(.pm-modal--create) .modal-close-button,
-.modal-container:has(.pm-modal--create) .modal-header-button,
-.modal:has(.pm-modal--create) .modal-close-button,
-.modal:has(.pm-modal--create) .modal-header-button {
-  display: none !important;
+.modal-container.pm-modal-container--task .modal-close-button,
+.modal-container.pm-modal-container--task .modal-header-button,
+.modal.pm-modal--task .modal-close-button,
+.modal.pm-modal--task .modal-header-button,
+.modal-container.pm-modal-container--create .modal-close-button,
+.modal-container.pm-modal-container--create .modal-header-button,
+.modal.pm-modal--create .modal-close-button,
+.modal.pm-modal--create .modal-header-button {
+  display: none;
 }
 
 /* The empty native .modal-header still carries a margin-bottom, which pushes our own

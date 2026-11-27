@@ -230,6 +230,7 @@ export async function loadSnapshot(doc: Document): Promise<Snapshot | null> {
   const url = doc.getElementById('app')?.dataset['snapshot']
   if (!url) return null
   try {
+    // eslint-disable-next-line obsidianmd/rule-custom-message -- this file is the standalone static-HTML export opened in a plain browser, not an Obsidian plugin surface; requestUrl (an Obsidian API) is not available here.
     const response = await fetch(url)
     if (!response.ok) return null
     const parsed: unknown = await response.json()

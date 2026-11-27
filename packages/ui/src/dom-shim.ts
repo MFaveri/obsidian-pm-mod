@@ -74,6 +74,7 @@ function createElIn(
   info?: ElementInfo | string,
   callback?: (el: HTMLElement) => void
 ): HTMLElement {
+  // eslint-disable-next-line obsidianmd/prefer-create-el -- this IS the createEl polyfill for non-Obsidian contexts (tests, the standalone viewer); it must call the native DOM API it is shimming.
   const el = documentOf(container).createElement(tag)
   applyInfo(el, info)
   attach(el, container, info)
@@ -87,6 +88,7 @@ function createSvgIn(
   info?: ElementInfo | string,
   callback?: (el: SVGElement) => void
 ): SVGElement {
+  // eslint-disable-next-line obsidianmd/prefer-create-el -- this IS the createSvg polyfill for non-Obsidian contexts; it must call the native DOM API it is shimming.
   const el = documentOf(container).createElementNS('http://www.w3.org/2000/svg', tag)
   applyInfo(el, info)
   attach(el, container, info)
@@ -254,6 +256,7 @@ export function installDomShim(): void {
     createSvg: (tag: string, info?: ElementInfo | string, callback?: (el: SVGElement) => void) =>
       createSvgIn(undefined, tag, info, callback),
     createFragment: (callback?: (el: DocumentFragment) => void) => {
+      // eslint-disable-next-line obsidianmd/prefer-create-el -- this IS the createFragment polyfill for non-Obsidian contexts; it must call the native DOM API it is shimming.
       const fragment = document.createDocumentFragment()
       callback?.(fragment)
       return fragment
