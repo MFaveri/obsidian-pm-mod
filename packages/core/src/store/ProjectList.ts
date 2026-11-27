@@ -192,13 +192,7 @@ export function arrangeProjects(
     for (const key of keys) byKey.set(key, [...(byKey.get(key) ?? []), root])
   }
   const keys = [...byKey.keys()].sort((a, b) =>
-    state.group === 'tier'
-      ? compareTiers(a, b, configuredTiers)
-      : a === ''
-        ? 1
-        : b === ''
-          ? -1
-          : a.localeCompare(b)
+    state.group === 'tier' ? compareTiers(a, b, configuredTiers) : a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)
   )
   const groups = keys
     .map((key) => {

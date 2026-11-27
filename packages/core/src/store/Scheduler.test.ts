@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_PRIORITIES, DEFAULT_STATUSES, makeTask, type ResolvedProjectConfig, type StatusConfig, type Task } from '../types'
+import {
+  DEFAULT_PRIORITIES,
+  DEFAULT_STATUSES,
+  makeTask,
+  type ResolvedProjectConfig,
+  type StatusConfig,
+  type Task
+} from '../types'
 import {
   addDays,
   computeBaselineVariance,
@@ -524,14 +531,20 @@ describe('computeCriticalPath', () => {
   })
 
   it('returns empty results when no active dated tasks exist and reports cycles', () => {
-    const emptyResult = computeCriticalPath([task({ id: 'u' }), task({ id: 'd', status: 'done', due: '2026-04-05' })], statuses)
+    const emptyResult = computeCriticalPath(
+      [task({ id: 'u' }), task({ id: 'd', status: 'done', due: '2026-04-05' })],
+      statuses
+    )
     expect(emptyResult.projectFinish).toBe('')
     expect(emptyResult.criticalTaskIds).toEqual([])
 
-    const cyclic = computeCriticalPath([
-      task({ id: 'x', start: '2026-04-01', due: '2026-04-02', dependencies: ['y'] }),
-      task({ id: 'y', start: '2026-04-03', due: '2026-04-04', dependencies: ['x'] })
-    ], statuses)
+    const cyclic = computeCriticalPath(
+      [
+        task({ id: 'x', start: '2026-04-01', due: '2026-04-02', dependencies: ['y'] }),
+        task({ id: 'y', start: '2026-04-03', due: '2026-04-04', dependencies: ['x'] })
+      ],
+      statuses
+    )
     expect(cyclic.cycles).toEqual([['x', 'y']])
     expect(cyclic.criticalTaskIds).toEqual([])
   })
@@ -637,11 +650,11 @@ describe('durationDays and computeDurationRisk', () => {
   })
 
   it('returns null when window covers durationDays or task is a milestone', () => {
+    expect(computeDurationRisk(task({ id: 'ok', start: '2026-05-04', due: '2026-05-08', durationDays: 5 }))).toBeNull()
     expect(
-      computeDurationRisk(task({ id: 'ok', start: '2026-05-04', due: '2026-05-08', durationDays: 5 }))
-    ).toBeNull()
-    expect(
-      computeDurationRisk(task({ id: 'ms', type: 'milestone', start: '2026-05-04', due: '2026-05-04', durationDays: 5 }))
+      computeDurationRisk(
+        task({ id: 'ms', type: 'milestone', start: '2026-05-04', due: '2026-05-04', durationDays: 5 })
+      )
     ).toBeNull()
   })
 

@@ -2,13 +2,7 @@ import { ButtonComponent, ItemView, Menu, WorkspaceLeaf } from 'obsidian'
 import type PMPlugin from '#main'
 import { addTabPageItems, refreshTabTitle } from '#ui/tab'
 import type { ProjectRef } from '#store'
-import {
-  type ChartWindowMode,
-  type Project,
-  computeProjectCharts,
-  t,
-  tn
-} from '@dotpm/core'
+import { type ChartWindowMode, type Project, computeProjectCharts, t, tn } from '@dotpm/core'
 import { EmptyState, SegmentedControl, renderGlyph, safeAsync } from '@dotpm/ui'
 import { type ChartsViewInteractionState, renderProjectChartsBody } from './ChartsRenderer'
 
@@ -45,9 +39,7 @@ export class ProjectChartsView extends ItemView {
   }
 
   getDisplayText(): string {
-    return this.project
-      ? t('charts.viewLabel', { title: this.project.title })
-      : t('charts.title')
+    return this.project ? t('charts.viewLabel', { title: this.project.title }) : t('charts.title')
   }
 
   getIcon(): string {
@@ -58,12 +50,7 @@ export class ProjectChartsView extends ItemView {
     super.onPaneMenu(menu, source)
     const project = this.project
     if (!project) return
-    addTabPageItems(menu, this.plugin, this.leaf, project.filePath, [
-      'overview',
-      'tasks',
-      'edit',
-      'note'
-    ])
+    addTabPageItems(menu, this.plugin, this.leaf, project.filePath, ['overview', 'tasks', 'edit', 'note'])
   }
 
   async setState(state: ProjectChartsState, result: unknown): Promise<void> {
@@ -149,10 +136,7 @@ export class ProjectChartsView extends ItemView {
 
   private renderMissing(): void {
     this.container.empty()
-    new EmptyState(this.container)
-      .setIcon('📊')
-      .setTitle(t('project.missingTitle'))
-      .setBody(t('project.missingBody'))
+    new EmptyState(this.container).setIcon('📊').setTitle(t('project.missingTitle')).setBody(t('project.missingBody'))
   }
 
   render(): void {
@@ -182,11 +166,7 @@ export class ProjectChartsView extends ItemView {
 
   private renderBreadcrumbs(project: Project): void {
     const chain: ProjectRef[] = []
-    for (
-      let ref = this.plugin.index.parentOf(project.filePath);
-      ref;
-      ref = this.plugin.index.parentOf(ref.path)
-    ) {
+    for (let ref = this.plugin.index.parentOf(project.filePath); ref; ref = this.plugin.index.parentOf(ref.path)) {
       chain.unshift(ref)
     }
     const bar = this.container.createDiv('pm-overview-crumbs')
@@ -245,8 +225,6 @@ export class ProjectChartsView extends ItemView {
     new ButtonComponent(controls)
       .setButtonText(t('project.openTasks'))
       .setCta()
-      .onClick(
-        safeAsync(() => this.plugin.router.openScope({ kind: 'project', path: project.filePath }, this.leaf))
-      )
+      .onClick(safeAsync(() => this.plugin.router.openScope({ kind: 'project', path: project.filePath }, this.leaf)))
   }
 }

@@ -187,9 +187,8 @@ export class GanttView implements SubView {
     this.rows = rows
     const extraWorkdays = this.scope.projects.flatMap((p) => this.plugin.store.configFor(p).extraWorkdays)
     const extraNonWorkdays = this.scope.projects.flatMap((p) => this.plugin.store.configFor(p).extraNonWorkdays)
-    const primaryCfg = !this.scope.isMulti && this.scope.primary
-      ? this.plugin.store.configFor(this.scope.primary)
-      : null
+    const primaryCfg =
+      !this.scope.isMulti && this.scope.primary ? this.plugin.store.configFor(this.scope.primary) : null
     const workingWeekdays = primaryCfg?.workingWeekdays
     this.criticalPath = this.scope.criticalPath(this.plugin.settings.holidays, this.externalPredecessors())
     const workloadResult = computeScopeWorkload(this.scope.tasks(), this.scope.config.statuses, {
@@ -436,16 +435,15 @@ export class GanttView implements SubView {
   }
 
   private makeRendererContext(): RendererContext {
-    const extraWorkdaySet = new Set(
-      this.scope.projects.flatMap((p) => this.plugin.store.configFor(p).extraWorkdays)
-    )
+    const extraWorkdaySet = new Set(this.scope.projects.flatMap((p) => this.plugin.store.configFor(p).extraWorkdays))
     const extraNonWorkdaySet = new Set(
       this.scope.projects.flatMap((p) => this.plugin.store.configFor(p).extraNonWorkdays)
     )
     const holidaySet = new Set(this.plugin.settings.holidays)
-    const primaryWeekdays = !this.scope.isMulti && this.scope.primary
-      ? this.plugin.store.configFor(this.scope.primary).workingWeekdays
-      : this.plugin.settings.workingWeekdays
+    const primaryWeekdays =
+      !this.scope.isMulti && this.scope.primary
+        ? this.plugin.store.configFor(this.scope.primary).workingWeekdays
+        : this.plugin.settings.workingWeekdays
     const weekdaySet = new Set(primaryWeekdays)
     const dayKind = (date: Temporal.PlainDate): GanttDayKind => {
       const iso = date.toString()

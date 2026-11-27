@@ -1407,17 +1407,8 @@ export class ProjectStore implements TaskSource {
     const replacementDependencies = [
       ...new Set([...replacement.dependencies.filter((id) => id !== source.id), ...source.dependencies])
     ]
-    const nodes = this.dependencyNodes(project, [
-      { ...replacement, dependencies: replacementDependencies }
-    ])
-    if (
-      wouldCreateReplacementCycle(
-        [...nodes.values()],
-        source.id,
-        replacement.id,
-        replacementDependencies
-      )
-    ) {
+    const nodes = this.dependencyNodes(project, [{ ...replacement, dependencies: replacementDependencies }])
+    if (wouldCreateReplacementCycle([...nodes.values()], source.id, replacement.id, replacementDependencies)) {
       throw new Error('The replacement would create a dependency cycle.')
     }
     if (isExisting) {

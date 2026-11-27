@@ -208,6 +208,9 @@ describe('LocalApi over the vault', () => {
     await expect(api.updateTask('b', { dependencies: ['a'] })).resolves.toMatchObject({ dependencies: ['a'] })
     await rejectsWith(api.updateTask('b', { status: 'in-progress' }), 'invalid')
     await rejectsWith(api.updateTask('a', { status: 'superseded' }), 'invalid')
-    await rejectsWith(api.createTask(projectId, { title: 'Blocked new', status: 'in-progress', dependencies: ['a'] }), 'invalid')
+    await rejectsWith(
+      api.createTask(projectId, { title: 'Blocked new', status: 'in-progress', dependencies: ['a'] }),
+      'invalid'
+    )
   })
 })

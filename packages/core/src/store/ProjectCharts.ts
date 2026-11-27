@@ -222,18 +222,8 @@ export function computeProjectCharts(
     }
   }
 
-  const histogramStartWeek = resolveHistogramStart(
-    windowMode,
-    currentWeekStart,
-    earliestSchedWeek,
-    latestSchedWeek
-  )
-  const histogramWeekCount = resolveHistogramCount(
-    windowMode,
-    histogramStartWeek,
-    currentWeekStart,
-    latestSchedWeek
-  )
+  const histogramStartWeek = resolveHistogramStart(windowMode, currentWeekStart, earliestSchedWeek, latestSchedWeek)
+  const histogramWeekCount = resolveHistogramCount(windowMode, histogramStartWeek, currentWeekStart, latestSchedWeek)
 
   const assigneeCountForLegend = new Map<string, number>()
   const weeklyHistogram: WeeklyWorkloadBucket[] = []
@@ -279,10 +269,7 @@ export function computeProjectCharts(
       if (!isTerminalStatus(task.status, config.statuses)) continue
       const doneDate = parseDatePrefix(task.completed) ?? parsePlainDate(task.due)
       if (!doneDate) continue
-      if (
-        Temporal.PlainDate.compare(doneDate, wStart) >= 0 &&
-        Temporal.PlainDate.compare(doneDate, wEnd) <= 0
-      ) {
+      if (Temporal.PlainDate.compare(doneDate, wStart) >= 0 && Temporal.PlainDate.compare(doneDate, wEnd) <= 0) {
         doneInWeek++
       }
     }
@@ -449,7 +436,11 @@ export function computeProjectCharts(
       estimatedHours: row.estimatedHours,
       loggedHours: row.loggedHours,
       utilizationPct:
-        row.estimatedHours > 0 ? Math.round((row.loggedHours / row.estimatedHours) * 100) : row.loggedHours > 0 ? 100 : 0
+        row.estimatedHours > 0
+          ? Math.round((row.loggedHours / row.estimatedHours) * 100)
+          : row.loggedHours > 0
+            ? 100
+            : 0
     }))
     .sort((a, b) => Math.max(b.estimatedHours, b.loggedHours) - Math.max(a.estimatedHours, a.loggedHours))
 
@@ -518,8 +509,7 @@ function resolveHistogramCount(
 ): number {
   if (!latestWeek) return 12
   if (mode === 'rolling12') return 12
-  const endWeek =
-    Temporal.PlainDate.compare(latestWeek, currentWeek) >= 0 ? latestWeek : currentWeek
+  const endWeek = Temporal.PlainDate.compare(latestWeek, currentWeek) >= 0 ? latestWeek : currentWeek
   const weeks = Math.floor(startWeek.until(endWeek, { largestUnit: 'day' }).days / 7) + 1
   return Math.max(4, Math.min(weeks, 36))
 }
@@ -565,14 +555,9 @@ function computeBurnup(
   const startBase = minDate ?? todayDate
   const endBase = maxDate ?? todayDate
   const startWeek = mondayOf(startBase)
-  const rawEndWeek = mondayOf(
-    Temporal.PlainDate.compare(endBase, todayDate) >= 0 ? endBase : todayDate
-  )
+  const rawEndWeek = mondayOf(Temporal.PlainDate.compare(endBase, todayDate) >= 0 ? endBase : todayDate)
 
-  const totalWeeks = Math.max(
-    1,
-    Math.floor(startWeek.until(rawEndWeek, { largestUnit: 'day' }).days / 7) + 1
-  )
+  const totalWeeks = Math.max(1, Math.floor(startWeek.until(rawEndWeek, { largestUnit: 'day' }).days / 7) + 1)
   const stepWeeks = totalWeeks > 24 ? Math.ceil(totalWeeks / 24) : 1
 
   const points: BurnupPoint[] = []

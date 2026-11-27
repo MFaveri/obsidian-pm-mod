@@ -8,7 +8,19 @@ import { t } from '../i18n'
  * `subtasks` puts each subtask on a card of its own.
  */
 const BUILT_IN: Record<ViewMode, string[]> = {
-  table: ['title', 'project', 'status', 'priority', 'assignees', 'due', 'progress', 'time', 'duration', 'slack', 'baseline'],
+  table: [
+    'title',
+    'project',
+    'status',
+    'priority',
+    'assignees',
+    'due',
+    'progress',
+    'time',
+    'duration',
+    'slack',
+    'baseline'
+  ],
   kanban: ['priority', 'description', 'time', 'tags', 'progress', 'project', 'assignees', 'due', 'subtasks'],
   gantt: ['title', 'assignees', 'progress', 'dates', 'status', 'priority']
 }

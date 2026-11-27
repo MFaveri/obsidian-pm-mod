@@ -1328,10 +1328,7 @@ export class ProjectView extends ItemView {
         .onClick(
           safeAsync(async () => {
             if (hasBaseline) {
-              const ok = await confirmDialog(
-                this.app,
-                t('gantt.baselineCaptureConfirm', { date: savedLabel || '—' })
-              )
+              const ok = await confirmDialog(this.app, t('gantt.baselineCaptureConfirm', { date: savedLabel || '—' }))
               if (!ok) return
             }
             let count = 0

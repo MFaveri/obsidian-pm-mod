@@ -300,15 +300,7 @@ function renderEmptyRowClickTarget(g: SVGGElement, task: Task, row: number, ctx:
 function renderMilestoneDiamond(g: SVGGElement, task: Task, row: number, color: string, ctx: RendererContext): void {
   const project = ctx.scope.projectOf(task.id)
   if (!project) return
-  const diamond = drawMilestoneDiamond(
-    g,
-    ctx,
-    task,
-    row,
-    color,
-    criticalInfoFor(task, ctx),
-    baselineInfoFor(task, ctx)
-  )
+  const diamond = drawMilestoneDiamond(g, ctx, task, row, color, criticalInfoFor(task, ctx), baselineInfoFor(task, ctx))
   diamond?.addEventListener('click', () => {
     openTaskModal(ctx.plugin, project, { task, onSave: () => ctx.onRefresh() })
   })

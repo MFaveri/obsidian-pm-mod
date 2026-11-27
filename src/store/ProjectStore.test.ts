@@ -601,9 +601,9 @@ describe('ProjectStore round-trip', () => {
     await store.insertTask(project, source)
     await store.insertTask(project, existing)
 
-    await expect(
-      store.replaceTask(project, source.id, existing, { duplicateSubtasks: false })
-    ).rejects.toThrow('Unfinished prereq')
+    await expect(store.replaceTask(project, source.id, existing, { duplicateSubtasks: false })).rejects.toThrow(
+      'Unfinished prereq'
+    )
     expect(source.status).toBe('todo')
     expect(existing.replaces).toBeUndefined()
   })

@@ -64,9 +64,7 @@ describe('computeScopeWorkload', () => {
     expect(res.assignees[0].isOverloaded).toBe(true)
     expect(res.assignees[0].maxConcurrentTasks).toBe(2)
     expect(res.assignees[0].overloadDaysCount).toBe(3)
-    expect(res.assignees[0].conflicts).toEqual([
-      { task1Id: 't1', task2Id: 't2', overlappingDays: 3 }
-    ])
+    expect(res.assignees[0].conflicts).toEqual([{ task1Id: 't1', task2Id: 't2', overlappingDays: 3 }])
     expect(res.overloadedTaskIds.has('t1')).toBe(true)
     expect(res.overloadedTaskIds.has('t2')).toBe(true)
     expect(res.totalOverloadedAssignees).toBe(1)

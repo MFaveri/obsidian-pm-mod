@@ -488,7 +488,7 @@ export class ProjectEditView extends ItemView {
         btn.disabled = !custom
         btn.addEventListener('click', () => {
           if (active.has(day)) {
-            if (active.size <= 1 && !(project.config?.extraWorkdays?.length)) {
+            if (active.size <= 1 && !project.config?.extraWorkdays?.length) {
               new Notice(t('projectEdit.atLeastOneWorkday'))
               return
             }
@@ -496,7 +496,10 @@ export class ProjectEditView extends ItemView {
           } else {
             active.add(day)
           }
-          this.patchConfig('workingWeekdays', [...active].sort((a, b) => a - b))
+          this.patchConfig(
+            'workingWeekdays',
+            [...active].sort((a, b) => a - b)
+          )
           this.render()
         })
       }

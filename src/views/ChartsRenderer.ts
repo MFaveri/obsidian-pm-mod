@@ -78,11 +78,7 @@ function colorForAssignee(name: string, orderedNames: string[]): string {
   return ASSIGNEE_PALETTE[idx % ASSIGNEE_PALETTE.length]
 }
 
-function attachTooltip(
-  host: HTMLElement,
-  target: Element,
-  lines: () => string[]
-): void {
+function attachTooltip(host: HTMLElement, target: Element, lines: () => string[]): void {
   target.addEventListener('mouseenter', (ev) => {
     const mouse = ev as MouseEvent
     const existing = host.querySelector('.pm-charts-tooltip')
@@ -130,9 +126,7 @@ function renderDrilldownPanel(
   closeBtn.setAttribute('title', t('charts.clearSelection'))
   closeBtn.addEventListener('click', onClear)
 
-  const tasks = taskIds
-    .map((id) => ctx.data.taskLookup.get(id))
-    .filter((task): task is Task => task !== undefined)
+  const tasks = taskIds.map((id) => ctx.data.taskLookup.get(id)).filter((task): task is Task => task !== undefined)
 
   if (tasks.length === 0) {
     box.createDiv({ cls: 'pm-overview-muted', text: t('charts.selectionEmpty') })
@@ -142,8 +136,7 @@ function renderDrilldownPanel(
   const list = box.createDiv('pm-charts-drilldown-list')
   for (const task of tasks.slice(0, 20)) {
     const row = list.createDiv('pm-charts-drilldown-row')
-    const statusColor =
-      ctx.config.statuses.find((s) => s.id === task.status)?.color ?? 'var(--text-muted)'
+    const statusColor = ctx.config.statuses.find((s) => s.id === task.status)?.color ?? 'var(--text-muted)'
     const dot = row.createSpan({ cls: 'pm-charts-status-dot' })
     dot.style.backgroundColor = statusColor
 
@@ -175,10 +168,7 @@ function renderDrilldownPanel(
 export function renderProjectChartsBody(parent: HTMLElement, ctx: ChartsRenderContext): void {
   const { data } = ctx
   if (data.summary.totalTasks === 0) {
-    new EmptyState(parent)
-      .setIcon('📊')
-      .setTitle(t('charts.title'))
-      .setBody(t('charts.emptyNoData'))
+    new EmptyState(parent).setIcon('📊').setTitle(t('charts.title')).setBody(t('charts.emptyNoData'))
     return
   }
 
@@ -401,8 +391,7 @@ function renderWeeklyHistogramCard(parent: HTMLElement, ctx: ChartsRenderContext
         'text-anchor': 'middle',
         class: 'pm-charts-bar-value'
       })
-      topLabel.textContent =
-        bucket.overloadDays > 0 ? `${bucket.activeTotal}⚡` : String(bucket.activeTotal)
+      topLabel.textContent = bucket.overloadDays > 0 ? `${bucket.activeTotal}⚡` : String(bucket.activeTotal)
       group.appendChild(topLabel)
     }
 
@@ -457,8 +446,7 @@ function renderWeeklyHistogramCard(parent: HTMLElement, ctx: ChartsRenderContext
     })
 
     group.addEventListener('click', () => {
-      ctx.state.selectedWeekStart =
-        ctx.state.selectedWeekStart === bucket.weekStart ? null : bucket.weekStart
+      ctx.state.selectedWeekStart = ctx.state.selectedWeekStart === bucket.weekStart ? null : bucket.weekStart
       ctx.redraw()
     })
 
@@ -528,11 +516,7 @@ function buildHistogramSegments(
 }
 
 function renderAssigneeDistributionCard(parent: HTMLElement, ctx: ChartsRenderContext): void {
-  const { card, body } = createChartCard(
-    parent,
-    t('charts.assigneeHeading'),
-    t('charts.assigneeHint')
-  )
+  const { card, body } = createChartCard(parent, t('charts.assigneeHeading'), t('charts.assigneeHint'))
 
   const rows = ctx.data.assigneeDistribution
   if (rows.length === 0) {
@@ -556,16 +540,10 @@ function renderAssigneeDistributionCard(parent: HTMLElement, ctx: ChartsRenderCo
   if (ctx.state.selectedAssignee) {
     const selected = rows.find((r) => r.assignee === ctx.state.selectedAssignee)
     if (selected) {
-      renderDrilldownPanel(
-        card,
-        displayAssignee(selected.assignee),
-        selected.taskIds,
-        ctx,
-        () => {
-          ctx.state.selectedAssignee = null
-          ctx.redraw()
-        }
-      )
+      renderDrilldownPanel(card, displayAssignee(selected.assignee), selected.taskIds, ctx, () => {
+        ctx.state.selectedAssignee = null
+        ctx.redraw()
+      })
     }
   }
 }
@@ -619,8 +597,7 @@ function renderAssigneeHBarRow(
   }
 
   item.addEventListener('click', () => {
-    ctx.state.selectedAssignee =
-      ctx.state.selectedAssignee === row.assignee ? null : row.assignee
+    ctx.state.selectedAssignee = ctx.state.selectedAssignee === row.assignee ? null : row.assignee
     ctx.redraw()
   })
 }
@@ -634,20 +611,12 @@ function renderBurnupCard(parent: HTMLElement, ctx: ChartsRenderContext): void {
         ? tn('charts.paceBehind', -burnup.paceDelta)
         : t('charts.onPace')
 
-  const { headerRight, body } = createChartCard(
-    parent,
-    t('charts.burnupHeading'),
-    t('charts.burnupHint')
-  )
+  const { headerRight, body } = createChartCard(parent, t('charts.burnupHeading'), t('charts.burnupHint'))
 
   new Chip(headerRight)
     .setLabel(paceNote)
     .setVariant(burnup.paceDelta < 0 ? 'outline' : 'solid')
-    .setColor(
-      burnup.paceDelta < 0
-        ? 'var(--color-orange, var(--color-red))'
-        : 'var(--color-green, #22c55e)'
-    )
+    .setColor(burnup.paceDelta < 0 ? 'var(--color-orange, var(--color-red))' : 'var(--color-green, #22c55e)')
     .setSize('sm')
 
   const points = burnup.points
@@ -659,9 +628,7 @@ function renderBurnupCard(parent: HTMLElement, ctx: ChartsRenderContext): void {
   const chartHost = body.createDiv('pm-charts-svg-host')
   const maxVal = Math.max(
     1,
-    ...points.map((p) =>
-      Math.max(p.totalScope, p.plannedDue, p.baselinePlannedDue ?? 0, p.actualCompleted ?? 0)
-    )
+    ...points.map((p) => Math.max(p.totalScope, p.plannedDue, p.baselinePlannedDue ?? 0, p.actualCompleted ?? 0))
   )
 
   const width = 460
@@ -866,11 +833,7 @@ function slackMeta(key: SlackBucketKey): { label: string; color: string } {
 }
 
 function renderSlackProfileCard(parent: HTMLElement, ctx: ChartsRenderContext): void {
-  const { card, body } = createChartCard(
-    parent,
-    t('charts.slackHeading'),
-    t('charts.slackHint')
-  )
+  const { card, body } = createChartCard(parent, t('charts.slackHeading'), t('charts.slackHint'))
 
   const { buckets, totalActive } = ctx.data.slackProfile
   if (totalActive === 0) {
@@ -890,8 +853,7 @@ function renderSlackProfileCard(parent: HTMLElement, ctx: ChartsRenderContext): 
     seg.style.backgroundColor = meta.color
     seg.setAttribute('title', `${meta.label}: ${bucket.count}`)
     seg.addEventListener('click', () => {
-      ctx.state.selectedSlackBucket =
-        ctx.state.selectedSlackBucket === bucket.key ? null : bucket.key
+      ctx.state.selectedSlackBucket = ctx.state.selectedSlackBucket === bucket.key ? null : bucket.key
       ctx.redraw()
     })
   }
@@ -905,16 +867,10 @@ function renderSlackProfileCard(parent: HTMLElement, ctx: ChartsRenderContext): 
   if (ctx.state.selectedSlackBucket) {
     const picked = buckets.find((b) => b.key === ctx.state.selectedSlackBucket)
     if (picked) {
-      renderDrilldownPanel(
-        card,
-        slackMeta(picked.key).label,
-        picked.taskIds,
-        ctx,
-        () => {
-          ctx.state.selectedSlackBucket = null
-          ctx.redraw()
-        }
-      )
+      renderDrilldownPanel(card, slackMeta(picked.key).label, picked.taskIds, ctx, () => {
+        ctx.state.selectedSlackBucket = null
+        ctx.redraw()
+      })
     }
   }
 }
@@ -947,8 +903,7 @@ function renderSlackBucketRow(
 
   if (bucket.count > 0) {
     row.addEventListener('click', () => {
-      ctx.state.selectedSlackBucket =
-        ctx.state.selectedSlackBucket === bucket.key ? null : bucket.key
+      ctx.state.selectedSlackBucket = ctx.state.selectedSlackBucket === bucket.key ? null : bucket.key
       ctx.redraw()
     })
   }
@@ -1027,10 +982,7 @@ function renderEffortCard(parent: HTMLElement, ctx: ChartsRenderContext): void {
     })
   )
 
-  const maxH = Math.max(
-    1,
-    ...effortByAssignee.map((r) => Math.max(r.estimatedHours, r.loggedHours))
-  )
+  const maxH = Math.max(1, ...effortByAssignee.map((r) => Math.max(r.estimatedHours, r.loggedHours)))
 
   const list = body.createDiv('pm-charts-effort-list')
   for (const row of effortByAssignee) {

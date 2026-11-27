@@ -259,8 +259,7 @@ export function mapRawToTask(r: Record<string, unknown>, overrides?: Partial<Tas
       typeof r.durationDays === 'number' && Number.isFinite(r.durationDays) && r.durationDays >= 1
         ? Math.floor(r.durationDays)
         : undefined,
-    baselineStart:
-      typeof r.baselineStart === 'string' && parsePlainDate(r.baselineStart) ? r.baselineStart : undefined,
+    baselineStart: typeof r.baselineStart === 'string' && parsePlainDate(r.baselineStart) ? r.baselineStart : undefined,
     baselineDue: typeof r.baselineDue === 'string' && parsePlainDate(r.baselineDue) ? r.baselineDue : undefined,
     progress: typeof r.progress === 'number' ? r.progress : 0,
     completed: (r.completed as string) ?? '',
@@ -372,9 +371,11 @@ function hydrateProjectConfig(raw: unknown): ProjectConfig | undefined {
   if (typeof r.pullForwardOnEarlyFinish === 'boolean') config.pullForwardOnEarlyFinish = r.pullForwardOnEarlyFinish
   if (typeof r.scheduleWorkdaysOnly === 'boolean') config.scheduleWorkdaysOnly = r.scheduleWorkdaysOnly
   if (Array.isArray(r.workingWeekdays)) {
-    const days = [...new Set(r.workingWeekdays.filter((d): d is number => typeof d === 'number' && Number.isInteger(d) && d >= 1 && d <= 7))].sort(
-      (a, b) => a - b
-    )
+    const days = [
+      ...new Set(
+        r.workingWeekdays.filter((d): d is number => typeof d === 'number' && Number.isInteger(d) && d >= 1 && d <= 7)
+      )
+    ].sort((a, b) => a - b)
     if (days.length) config.workingWeekdays = days
   }
   if (Array.isArray(r.extraWorkdays)) {

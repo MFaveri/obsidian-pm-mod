@@ -336,7 +336,8 @@ export function renderTaskFormFields(container: HTMLElement, ctx: TaskFormFields
           number: { min: 1 },
           onChange: (v) => {
             const parsed = Number(v)
-            task.durationDays = v.trim() !== '' && Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : undefined
+            task.durationDays =
+              v.trim() !== '' && Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : undefined
             rerender()
           }
         })
@@ -488,7 +489,10 @@ export function renderTaskFormFields(container: HTMLElement, ctx: TaskFormFields
           },
           renderDepExtra: (row, depId) => {
             const spec = getDependencySpec(task, depId)
-            const typeSel = row.createEl('select', { cls: 'pm-dep-type', attr: { title: t(`taskForm.depType${spec.type}`) } })
+            const typeSel = row.createEl('select', {
+              cls: 'pm-dep-type',
+              attr: { title: t(`taskForm.depType${spec.type}`) }
+            })
             for (const optType of ['FS', 'SS', 'FF'] as const) {
               const opt = typeSel.createEl('option', { value: optType, text: optType })
               if (optType === spec.type) opt.selected = true

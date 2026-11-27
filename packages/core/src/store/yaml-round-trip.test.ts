@@ -390,7 +390,9 @@ describe('project round-trip', () => {
 
   it('reads saved non-working days and drops anything but true', () => {
     const fm = {
-      savedViews: [{ id: 'v1', name: 'D', nonWorkingDays: { weekends: true, holidays: 'yes', timeOff: true, fridays: true } }]
+      savedViews: [
+        { id: 'v1', name: 'D', nonWorkingDays: { weekends: true, holidays: 'yes', timeOff: true, fridays: true } }
+      ]
     }
     const project = hydrateProjectFromFrontmatter(fm, '', 'Projects/P.md', 'P')
     expect(project.savedViews[0].nonWorkingDays).toEqual({ weekends: true, timeOff: true })

@@ -332,8 +332,7 @@ export function drawSummaryBar(
   const xEnd = Math.min(canvas.cfg.totalWidth, dateToX(canvas.cfg, effectiveEnd))
   const width = Math.max(10, xEnd - x)
   const cap = 5
-  const color =
-    summary.color || getComputedStyle(canvas.svgEl).getPropertyValue('--interactive-accent').trim()
+  const color = summary.color || getComputedStyle(canvas.svgEl).getPropertyValue('--interactive-accent').trim()
 
   const group = svgEl('g', { class: 'pm-gantt-summary-group' })
   g.appendChild(group)
@@ -466,8 +465,7 @@ export function drawTaskSummaryBar(
   const xEnd = Math.min(canvas.cfg.totalWidth, dateToX(canvas.cfg, effectiveEnd))
   const width = Math.max(10, xEnd - x)
   const cap = 5
-  const color =
-    summary.color || getComputedStyle(canvas.svgEl).getPropertyValue('--interactive-accent').trim()
+  const color = summary.color || getComputedStyle(canvas.svgEl).getPropertyValue('--interactive-accent').trim()
 
   const group = svgEl('g', {
     class: `pm-gantt-summary-group pm-gantt-task-summary-group${summary.collapsed ? ' pm-gantt-summary--collapsed' : ' pm-gantt-summary--expanded'}`
@@ -665,11 +663,7 @@ export function drawMilestoneLabels(
   canvas.svgEl.appendChild(linesG)
 }
 
-export function drawDependencyArrows(
-  canvas: GanttCanvas,
-  rows: GanttRow[],
-  criticalEdges?: ReadonlySet<string>
-): void {
+export function drawDependencyArrows(canvas: GanttCanvas, rows: GanttRow[], criticalEdges?: ReadonlySet<string>): void {
   const byId = new Map<string, { row: number; task: Task }>()
   rows.forEach((entry, i) => byId.set(entry.task.id, { row: entry.row ?? i, task: entry.task }))
 

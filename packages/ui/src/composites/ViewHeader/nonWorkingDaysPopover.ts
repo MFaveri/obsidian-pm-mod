@@ -16,11 +16,7 @@ export interface NonWorkingDaysProps {
 }
 
 /** Whether the timeline leaves out weekends and holidays, and the holiday list itself. */
-export function renderNonWorkingDaysPanel(
-  parent: HTMLElement,
-  props: NonWorkingDaysProps,
-  close?: () => void
-): void {
+export function renderNonWorkingDaysPanel(parent: HTMLElement, props: NonWorkingDaysProps, close?: () => void): void {
   const body = parent.createDiv('pm-days-pop')
   const { days } = props
   let holidays = [...props.holidays]

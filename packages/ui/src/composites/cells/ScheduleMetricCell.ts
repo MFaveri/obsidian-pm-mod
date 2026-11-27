@@ -44,10 +44,7 @@ function renderMetricContent(cell: HTMLElement, props: ScheduleMetricCellProps):
       return
     }
     const badge = cell.createSpan({ cls: 'pm-metric-badge pm-metric-badge--warn', text: `${days} (!)` })
-    setTooltip(
-      badge,
-      t('table.durationRiskHint', { available: risk.availableDays, required: risk.requiredDays })
-    )
+    setTooltip(badge, t('table.durationRiskHint', { available: risk.availableDays, required: risk.requiredDays }))
     return
   }
 

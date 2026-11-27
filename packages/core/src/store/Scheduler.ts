@@ -142,7 +142,11 @@ function snapForwardToWorkday(date: Temporal.PlainDate, calendar: WorkdayCalenda
   return cur
 }
 
-export function stepWorkingDays(date: Temporal.PlainDate, delta: number, calendar: WorkdayCalendar): Temporal.PlainDate {
+export function stepWorkingDays(
+  date: Temporal.PlainDate,
+  delta: number,
+  calendar: WorkdayCalendar
+): Temporal.PlainDate {
   if (!calendar.workdaysOnly) return date.add({ days: delta })
   if (delta === 0) return snapForwardToWorkday(date, calendar)
   const step = delta > 0 ? 1 : -1
@@ -155,7 +159,11 @@ export function stepWorkingDays(date: Temporal.PlainDate, delta: number, calenda
   return cur
 }
 
-function countWorkingDaysInclusive(start: Temporal.PlainDate, due: Temporal.PlainDate, calendar: WorkdayCalendar): number {
+function countWorkingDaysInclusive(
+  start: Temporal.PlainDate,
+  due: Temporal.PlainDate,
+  calendar: WorkdayCalendar
+): number {
   if (!calendar.workdaysOnly) return Math.max(1, start.until(due, { largestUnit: 'days' }).days + 1)
   let count = 0
   let cur = start
@@ -436,14 +444,21 @@ export function computeSchedule(
     const currentDue = dueOf.get(id) ?? ''
     const isMilestone = task.type === 'milestone' || (!currentStart && !!currentDue)
     const mandatoryDuration =
-      !isMilestone && typeof task.durationDays === 'number' && Number.isFinite(task.durationDays) && task.durationDays >= 1
+      !isMilestone &&
+      typeof task.durationDays === 'number' &&
+      Number.isFinite(task.durationDays) &&
+      task.durationDays >= 1
         ? Math.floor(task.durationDays)
         : 0
     let duration = 1
     if (!isMilestone) {
       if (currentStart && currentDue) {
         duration = Math.max(
-          countWorkingDaysInclusive(Temporal.PlainDate.from(currentStart), Temporal.PlainDate.from(currentDue), calendar),
+          countWorkingDaysInclusive(
+            Temporal.PlainDate.from(currentStart),
+            Temporal.PlainDate.from(currentDue),
+            calendar
+          ),
           mandatoryDuration
         )
       } else if (mandatoryDuration > 0) {
@@ -481,10 +496,7 @@ export function computeSchedule(
     const daysSaved = workingDaysBetween(earliestStartDate, plannedEarliestStartDate, calendar)
 
     const pullBy = (anchor: string) =>
-      Math.min(
-        daysSaved,
-        Math.max(0, workingDaysBetween(earliestStartDate, Temporal.PlainDate.from(anchor), calendar))
-      )
+      Math.min(daysSaved, Math.max(0, workingDaysBetween(earliestStartDate, Temporal.PlainDate.from(anchor), calendar)))
 
     let newStart = currentStart
     let newDue = currentDue
@@ -604,7 +616,10 @@ export function computeCriticalPath(
 
     const isMilestone = task.type === 'milestone' || (!task.start && !!task.due)
     const mandatoryDuration =
-      !isMilestone && typeof task.durationDays === 'number' && Number.isFinite(task.durationDays) && task.durationDays >= 1
+      !isMilestone &&
+      typeof task.durationDays === 'number' &&
+      Number.isFinite(task.durationDays) &&
+      task.durationDays >= 1
         ? Math.floor(task.durationDays)
         : 0
     const windowDuration = isMilestone ? 1 : countWorkingDaysInclusive(schedStart, schedDue, calendar)
@@ -751,8 +766,7 @@ export function computeCriticalPath(
       if (spec.type === 'SS') {
         tight = Temporal.PlainDate.compare(stepWorkingDays(fromEarlyStart, spec.lagDays, calendar), toEarlyStart) >= 0
       } else if (spec.type === 'FF') {
-        tight =
-          Temporal.PlainDate.compare(stepWorkingDays(fromEarlyFinish, spec.lagDays, calendar), toEarlyFinish) >= 0
+        tight = Temporal.PlainDate.compare(stepWorkingDays(fromEarlyFinish, spec.lagDays, calendar), toEarlyFinish) >= 0
       } else {
         tight =
           Temporal.PlainDate.compare(stepWorkingDays(fromEarlyFinish, 1 + spec.lagDays, calendar), toEarlyStart) >= 0

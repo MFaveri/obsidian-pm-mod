@@ -81,10 +81,7 @@ function openQuickStatusMenu(
   menu.showAtMouseEvent(e)
 }
 
-export async function renderPortfolioCockpit(
-  ctx: CockpitRenderContext,
-  isStale: () => boolean
-): Promise<void> {
+export async function renderPortfolioCockpit(ctx: CockpitRenderContext, isStale: () => boolean): Promise<void> {
   const { plugin, contentEl, groups } = ctx
   const seenPaths = new Set<string>()
   const orderedPaths: string[] = []
@@ -174,11 +171,7 @@ function renderPortfolioKpis(parent: HTMLElement, cockpit: PortfolioCockpitResul
 
 const FOCUS_LIMIT_OPTIONS = [5, 10, 15, 20, 30, 0] as const
 
-function renderFocusSection(
-  parent: HTMLElement,
-  cockpit: PortfolioCockpitResult,
-  ctx: CockpitRenderContext
-): void {
+function renderFocusSection(parent: HTMLElement, cockpit: PortfolioCockpitResult, ctx: CockpitRenderContext): void {
   const section = parent.createDiv('pm-cockpit-section')
   const head = section.createDiv('pm-cockpit-section-head')
   const titleWrap = head.createDiv('pm-cockpit-section-title')
@@ -196,7 +189,8 @@ function renderFocusSection(
   }
 
   const limit = ctx.plugin.settings.cockpitFocusLimit
-  const limitLabel = limit > 0 ? `${t('dashboard.focusLimit')}: ${limit}` : `${t('dashboard.focusLimit')}: ${t('dashboard.focusAll')}`
+  const limitLabel =
+    limit > 0 ? `${t('dashboard.focusLimit')}: ${limit}` : `${t('dashboard.focusLimit')}: ${t('dashboard.focusAll')}`
   const limitBtn = new ChipButton(head).setIcon('sliders-horizontal').setLabel(limitLabel)
   limitBtn.onClick(() => {
     const menu = new Menu()
@@ -214,7 +208,12 @@ function renderFocusSection(
           )
       )
     }
-    menu.showAtMouseEvent(new MouseEvent('click', { clientX: limitBtn.el.getBoundingClientRect().left, clientY: limitBtn.el.getBoundingClientRect().bottom + 4 }))
+    menu.showAtMouseEvent(
+      new MouseEvent('click', {
+        clientX: limitBtn.el.getBoundingClientRect().left,
+        clientY: limitBtn.el.getBoundingClientRect().bottom + 4
+      })
+    )
   })
 
   if (cockpit.focusTasks.length === 0) {
@@ -228,11 +227,7 @@ function renderFocusSection(
   }
 }
 
-function renderFocusRow(
-  parent: HTMLElement,
-  item: PortfolioFocusTask,
-  ctx: CockpitRenderContext
-): void {
+function renderFocusRow(parent: HTMLElement, item: PortfolioFocusTask, ctx: CockpitRenderContext): void {
   const { task, project, config } = item
   const row = parent.createDiv('pm-cockpit-focus-row')
 
@@ -271,11 +266,7 @@ function renderFocusRow(
 
   const meta = row.createDiv('pm-cockpit-focus-meta')
   if (item.isCritical) {
-    new Chip(meta)
-      .setLabel(t('table.criticalBadge'))
-      .setVariant('solid')
-      .setColor('var(--color-red)')
-      .setSize('sm')
+    new Chip(meta).setLabel(t('table.criticalBadge')).setVariant('solid').setColor('var(--color-red)').setSize('sm')
   }
   if (item.hasDurationRisk) {
     new Chip(meta)
@@ -465,11 +456,7 @@ function renderProjectsGridSection(
   }
 }
 
-function renderProjectCard(
-  parent: HTMLElement,
-  card: ProjectCockpitCard,
-  ctx: CockpitRenderContext
-): void {
+function renderProjectCard(parent: HTMLElement, card: ProjectCockpitCard, ctx: CockpitRenderContext): void {
   const { project, config } = card
   const el = parent.createDiv(`pm-cockpit-card pm-cockpit-card--${card.health}`)
 
@@ -666,11 +653,7 @@ function renderProjectStepRow(
 
   const right = row.createDiv('pm-cockpit-step-right')
   if (step.isCritical) {
-    new Chip(right)
-      .setLabel(t('table.criticalBadge'))
-      .setVariant('outline')
-      .setColor('var(--color-red)')
-      .setSize('sm')
+    new Chip(right).setLabel(t('table.criticalBadge')).setVariant('outline').setColor('var(--color-red)').setSize('sm')
   }
   if (step.isBlocked) {
     new Chip(right).setLabel(t('dashboard.blockedBadge')).setVariant('plain').setSize('sm')

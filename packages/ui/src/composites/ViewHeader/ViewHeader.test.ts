@@ -695,7 +695,8 @@ describe('project filter popover', () => {
       onChange
     })
     const rows = (): HTMLElement[] => document.body.findAll('.pm-project-select .pm-pop-item')
-    const isChecked = (row: HTMLElement): boolean => !row.find('.pm-pop-check')?.classList.contains('pm-pop-check--hidden')
+    const isChecked = (row: HTMLElement): boolean =>
+      !row.find('.pm-pop-check')?.classList.contains('pm-pop-check--hidden')
     // First row is "All projects" (checked by default), followed by the 3 projects
     expect(rows()).toHaveLength(4)
     expect(isChecked(rows()[0])).toBe(true)
@@ -720,7 +721,10 @@ describe('project fields popover', () => {
 
   it('hides, shows and puts back the columns, with the title locked first', () => {
     const onChange = vi.fn<(shown: ProjectListField[]) => void>()
-    openProjectFieldsPopover(document.body.createEl('button'), { shown: ['tier', 'progress', 'tasks', 'due'], onChange })
+    openProjectFieldsPopover(document.body.createEl('button'), {
+      shown: ['tier', 'progress', 'tasks', 'due'],
+      onChange
+    })
     expect(ids('.pm-vis-row:not(.is-hidden)')).toEqual(['project', 'tier', 'progress', 'tasks', 'due'])
     expect(ids('.pm-vis-row.is-hidden')).toEqual(['members'])
     expect(document.body.find('.pm-vis-row')?.find('.pm-vis-eye')).toBeNull()

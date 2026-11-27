@@ -1,4 +1,12 @@
-import type { CustomFieldDef, DependencySpec, PriorityConfig, Recurrence, StatusConfig, TaskType, TimeLog } from '@dotpm/core'
+import type {
+  CustomFieldDef,
+  DependencySpec,
+  PriorityConfig,
+  Recurrence,
+  StatusConfig,
+  TaskType,
+  TimeLog
+} from '@dotpm/core'
 
 /** What a listing shows for a project, cheap enough to serve without loading it. */
 export interface ProjectSummary {

@@ -66,10 +66,8 @@ function compareBy(
       return dir * (sa - sb)
     }
     case 'baseline': {
-      const va =
-        computeBaselineVariance(a, metrics?.scheduleOptionsOf?.(a.id))?.dueDeltaDays ?? Number.MAX_SAFE_INTEGER
-      const vb =
-        computeBaselineVariance(b, metrics?.scheduleOptionsOf?.(b.id))?.dueDeltaDays ?? Number.MAX_SAFE_INTEGER
+      const va = computeBaselineVariance(a, metrics?.scheduleOptionsOf?.(a.id))?.dueDeltaDays ?? Number.MAX_SAFE_INTEGER
+      const vb = computeBaselineVariance(b, metrics?.scheduleOptionsOf?.(b.id))?.dueDeltaDays ?? Number.MAX_SAFE_INTEGER
       return dir * (va - vb)
     }
     default:
