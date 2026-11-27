@@ -31,8 +31,7 @@
   overflow: hidden;
 }
 .pm-vh-context > *,
-.pm-crumbs > *,
-.pm-crumb-ancestors > * {
+.pm-crumbs > * {
   flex-shrink: 0;
 }
 .pm-vh-context > .pm-crumbs {
@@ -235,9 +234,6 @@ button.pm-crumb--scoped:hover {
   color: var(--text-faint);
   --icon-size: 12px;
 }
-.pm-crumb-ancestors {
-  display: contents;
-}
 button.pm-crumb-fold,
 .pm-crumb-fold-sep {
   display: none;
@@ -246,7 +242,8 @@ button.pm-crumb-fold,
 .pm-vh--folded .pm-crumb-fold-sep {
   display: inline-flex;
 }
-.pm-vh--folded .pm-crumb-ancestors {
+.pm-vh--folded .pm-crumb--ancestor,
+.pm-vh--folded .pm-crumb-ancestor-sep {
   display: none;
 }
 
@@ -802,7 +799,7 @@ input.pm-days-input {
   grid-template-areas:
     'context query more'
     'view view tune';
-  column-gap: 2px;
+  gap: 0 2px;
   height: auto;
 }
 .pm-vh--phone .pm-vh-row > .pm-vh-slot {

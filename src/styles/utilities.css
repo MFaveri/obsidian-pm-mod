@@ -1,5 +1,5 @@
-.pm-hidden {
-  display: none !important;
+.pm-hidden.pm-hidden {
+  display: none;
 }
 .pm-invisible {
   visibility: hidden;

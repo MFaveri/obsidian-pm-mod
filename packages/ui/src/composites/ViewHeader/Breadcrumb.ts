@@ -61,11 +61,10 @@ export function renderBreadcrumb(parent: HTMLElement, props: BreadcrumbProps): H
     })
     appendSeparator(nav, 'pm-crumb-fold-sep')
 
-    const list = nav.createSpan('pm-crumb-ancestors')
     for (const ancestor of props.ancestors) {
-      const crumb = list.createEl('button', { cls: 'pm-crumb pm-crumb--ancestor', text: ancestor.title })
+      const crumb = nav.createEl('button', { cls: 'pm-crumb pm-crumb--ancestor', text: ancestor.title })
       crumb.addEventListener('click', (e) => ancestor.onOpen(e.ctrlKey || e.metaKey))
-      appendSeparator(list)
+      appendSeparator(nav, 'pm-crumb-ancestor-sep')
     }
   }
 
